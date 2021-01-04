@@ -9,11 +9,11 @@
         }
     ],
     "require": {
-        "simple-swoole/db": "^1.0"
+
     },
     "autoload": {
         "psr-4": {
-            "PTLibrary": "src/"
+            "PTLibrary\\": "src/"
         }
     }
 }
