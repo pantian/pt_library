@@ -1,0 +1,19 @@
+{
+    "name": "pantian/pt_library",
+    "description": "类库",
+    "type": "library",
+    "authors": [
+        {
+            "name": "pan tian",
+            "email": "pt444@126.com"
+        }
+    ],
+    "require": {
+        "simple-swoole/db": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "PTLibrary": "src/"
+        }
+    }
+}
