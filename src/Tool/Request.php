@@ -5,7 +5,8 @@ namespace PTLibrary\Tool;
 
 
 use PTFramework\Context;
-use PTFramework\Factory\InstanceFactory;
+use PTLibrary\Factory\InstanceFactory;
+
 
 class Request {
 
@@ -19,6 +20,9 @@ class Request {
 
 	}
 
+	public function __destruct(){
+
+	}
 	public function getRemoteIp(){
 	    return $this->swooleRequest->server['remote_addr']??'';
 	}

@@ -3,6 +3,9 @@
 namespace PTLibrary\Result;
 
 
+use PTLibrary\Tool\JSON;
+use PTLibrary\Tool\Tool;
+
 /**
  * json 输出对象
  * Class outJson
@@ -28,7 +31,7 @@ class Result {
 	 * @return $this
 	 */
 	public function init() {
-		$this->data = array( 'code' => 0, 'msg' => '', 'data' => '','_time'=>time() ,'_request_id'=>Tool::getRandChar(12));
+		$this->data = array( 'code' => 0, 'msg' => '', 'data' => '','_time'=>time() ,'_request_id'=>'');
 		return $this;
 	}
 
@@ -129,7 +132,8 @@ class Result {
 
 		if ( is_array( $this->data ) ) {
 			$this->data['_time'] = time();
-			return \Bin\JSON::encode( $this->data );
+
+			return JSON::encode( $this->data );
 		}
 		return false;
 	}

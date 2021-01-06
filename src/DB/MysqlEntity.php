@@ -3,8 +3,7 @@
 namespace PTLibrary\DB;
 
 
-use Bin\Log\Log;
-use Bin\Tool\Tool;
+use PTLibrary\Tool\Context;
 
 /**
  * mysql实体基类
@@ -13,13 +12,7 @@ use Bin\Tool\Tool;
  * @package DB
  */
 class MysqlEntity extends Entity {
-	/**
-	 * @var MysqlContainer
-	 */
-	protected $_container;
-	/**
-	 * @var \Bin\DB\BaseM
-	 */
+
 	protected $mod;
 
 
@@ -55,8 +48,8 @@ class MysqlEntity extends Entity {
 
 	/**
 	 * 获取模型
-	 * @return \Bin\DB\BaseM
-	 * @throws \Bin\Exception\DBException
+	 * @return \PTLibrary\DB\BaseM
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function getMod(){
 	    if(!$this->mod){
@@ -101,7 +94,7 @@ class MysqlEntity extends Entity {
 	 * @param $id
 	 *
 	 * @return bool|void
-	 * @throws \Bin\Exception\DBException
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function setId( $id ) {
 		if ( ! $id ) {

@@ -1,5 +1,5 @@
 <?php
-namespace Bin\Cache;
+namespace PTLibrary\Cache;
 class YacCache {
 	private $prefix = '';
 	private static $instance;

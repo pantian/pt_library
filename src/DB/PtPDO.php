@@ -9,7 +9,15 @@
 namespace PTLibrary\DB;
 
 
-
+use PTLibrary\Cache\YacCache;
+use PTLibrary\Error\ErrorHandler;
+use PTLibrary\Exception\ThrowException;
+use PTLibrary\Log\Log;
+use PTLibrary\Tool\Tool;
+use SebastianBergmann\CodeCoverage\Report\PHP;
+use Simps\DB\DB;
+use Simps\DB\PDO;
+use Swoole\Coroutine;
 
 class PtPDO {
 	/**
@@ -69,6 +77,21 @@ class PtPDO {
 	protected $fullTableName = '';
 
 	private $LastSql = '';
+
+	protected $pool;
+
+	/**
+	 * sql sleep 函数
+	 *
+	 * @var int
+	 */
+	private $sql_sleep = 0;
+
+
+	const EXECUTE_TYPE_SELECT = 1;
+	const EXECUTE_TYPE_UPDATE = 2;
+	const EXECUTE_TYPE_INSERT = 3;
+
 	/**
 	 * 是否忽略表前缀
 	 *
@@ -110,10 +133,14 @@ class PtPDO {
 	 */
 	private static $allSqlHistory = [];
 
+
 	/**
-	 * @var PDOConnect
+	 * @var \PDO
 	 */
-	private $PDOConnect = null;
+	protected $_pdo;
+
+	private $in_transaction = false;
+
 
 	private static $instance = null;
 
@@ -126,12 +153,10 @@ class PtPDO {
 	}
 
 	public function __destruct() {
-
-		//Log::debug( 'unset ' . self::class );
 	}
 
 	public function __construct() {
-
+		$this->pool = PDO::getInstance();
 
 	}
 
@@ -222,9 +247,20 @@ class PtPDO {
 		$this->table_prefix = $table_prefix;
 	}
 
+	public function sleep( $time = 0 ) {
+		$this->sql_sleep = (float) $time;
+		if ( $this->sql_sleep > 0 ) {
+			$sleepSql = "SELECT SLEEP(?)";
+			$this->exeCuteSqlData( $sleepSql, [ $this->sql_sleep ] );
+			$this->sql_sleep = 0.0;
+		}
+
+		return $this;
+	}
+
 
 	/**
-	 * @return null|\PDO|Connect\PDOConnect
+	 * @return \PDO|\Swoole\Database\PDOProxy
 	 */
 	public function getDB() {
 		$this->db = PDO::getInstance()->getConnection();
@@ -238,37 +274,11 @@ class PtPDO {
 
 
 	/**
-	 *选择数据库
-	 *
-	 * @param string $dbName 数据库名称
-	 *
-	 * @return bool|int
-	 */
-	public function selectDB( $dbName ) {
-
-		//if ( $dbName && $this->PDOConnect->currentDbName != $dbName ) {
-		if ( $dbName && ( ! $this->PDOConnect->currentDbName || $this->PDOConnect->currentDbName != $dbName ) ) {
-			$this->db_name                   = $dbName;
-			$sql                             = 'use ' . $dbName;
-			$res                             = $this->exec( $sql );
-			$this->PDOConnect->currentDbName = $dbName;
-
-			return $res;
-		}
-
-		return false;
-	}
-
-
-
-	/**
 	 * @return string
 	 */
 	public function getDbName() {
-		$dbName = $this->db_name;
-		$dbName || $dbName = $this->PDOConnect->getDbName();
+		return $this->db_name;
 
-		return $dbName;
 	}
 
 	/**
@@ -301,10 +311,8 @@ class PtPDO {
 			return $tables;
 		}
 
-		$sql  = 'select * from INFORMATION_SCHEMA.TABLES where TABLE_SCHEMA=:dbname';
-		$sth  = $this->exeCuteSqlData( $sql, [ 'dbname' => $this->db_name ] );
-		$data = $sth->fetchAll();
-		$sth->closeCursor();
+		$sql    = 'select * from INFORMATION_SCHEMA.TABLES where TABLE_SCHEMA=:dbname';
+		$data   = $this->exeCuteSqlData( $sql, [ 'dbname' => $this->db_name ] );
 		$tables = [];
 		foreach ( $data as $info ) {
 			$tables[ $info['TABLE_NAME'] ] = $info;
@@ -316,23 +324,38 @@ class PtPDO {
 	}
 
 	/**
+	 * 执行PDO查询
 	 *
-	 * @param $sql
-	 * @param $data
+	 * @param       $sql
+	 * @param array $data
+	 * @param null  $type
 	 *
-	 * @return bool|\PDOStatement
+	 * @return array
+	 * @throws \PTLibrary\Exception\DBException
 	 */
-	function exeCuteSqlData( $sql, $data = [] ) {
+	function exeCuteSqlData( $sql, $data = [], $type = self::EXECUTE_TYPE_SELECT ) {
 		$this->addSqlHistory( $sql );
-		$sth           = $this->getDB()->prepare( $sql );
-		$this->LastSql = $sql;
-		$sth->setFetchMode( \PDO::FETCH_ASSOC );
-		PDO::getInstance()->close( $this->db);//释放PDO链接
-		if($sth->execute( $data )===false){
-			ThrowException::DBException(ErrorHandler::DB_ERROR,'数据执行错误');
+		$this->realGetConn();
+		$statement = $this->_pdo->prepare( $sql );
+		$statement->setFetchMode( \PDO::FETCH_ASSOC );
+		if ( $statement->execute( $data ) === false ) {
+			ThrowException::DBException( ErrorHandler::DB_ERROR, '数据执行错误' );
 		}
+		switch ( $type ) {
+			case self::EXECUTE_TYPE_SELECT:
+				$res = $statement->fetchAll();
+				break;
+			case self::EXECUTE_TYPE_UPDATE:
+				$res = $statement->rowCount();
+				break;
+			case self::EXECUTE_TYPE_INSERT:
+				$res = $this->_pdo->lastInsertId();
+				break;
+		}
+		$statement->closeCursor();
+		$this->release( $this->_pdo );
 
-		return $sth;
+		return $res;
 	}
 
 	/**
@@ -340,8 +363,6 @@ class PtPDO {
 	 *
 	 *
 	 * @return bool
-	 * @throws \Exception
-	 * @throws \Bin\Exception\DBException
 	 */
 	public function table_exists() {
 		if ( self::$_is_hased_table ) {
@@ -368,21 +389,14 @@ class PtPDO {
 	 * @throws DBException
 	 */
 	public function create_table( $sql ) {
-		try {
-			$result = $this->getDB()->prepare( $sql );
-			$result->execute();
-			$res = $result->fetchAll();
 
-			return $res;
-		} catch ( DBException $e ) {
-			if ( ! $this->tryReconnect( $e ) ) {
-				throw new DBException( ErrorHandler::DB_CREATE_TABLE );
-			}
-		}
+		$result = $this->getDB()->prepare( $sql );
+		$result->execute();
+		$res = $result->fetchAll();
+
+		return $res;
+
 	}
-
-
-
 
 
 	/**
@@ -414,43 +428,31 @@ class PtPDO {
 		return $this->sql;
 	}
 
-	public $reconnect_num = 0;
-
 	/**
 	 *获取字段
 	 *
-	 * @param bool $isReget 是否重新获取
-	 *
-	 * @return mixed
-	 * @throws DBException
+	 * @return string
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function getFields() {
 		try {
-
 			$this->Fields = YacCache::getYacInstance()->get( $this->getTableHash() );
-
-
 			if ( $this->Fields ) {
-//				Log::log( 'fields from yac cache' );
 				return $this->Fields;
 			}
-
-
 			if ( $this->getFullTableName() ) {
 				$sql  = 'show full fields from ' . $this->fullTableName;
-				$rs   = $this->exeCuteSqlData( $sql );
-				$data = $rs->fetchAll();
-
-				if ( $rs ) {
+				$data = $this->exeCuteSqlData( $sql );
+				if ( $data ) {
 					foreach ( $data as $row ) {
 						$this->Fields[ $row['Field'] ] = $row;
 						if ( empty( $this->PK ) && $row['Key'] == 'PRI' ) {
 							$this->PK = $row['Field'];
 						}
 					}
+
 				}
 				YacCache::getYacInstance()->set( $this->getTableHash(), $this->Fields );
-				$this->reconnect_num = 0;
 
 				return $this->Fields;
 			} else {
@@ -460,35 +462,10 @@ class PtPDO {
 
 		} catch ( \Exception $e ) {
 			Log::error( '数据库异常：code = ' . $e->getCode() . '； 错误信息 ' . $e->getMessage() );
-			if ( $this->tryReconnect( $e ) ) {
-				return $this->getFields();
-			} else {
-				Log::error( $e->getMessage() );
-
-				throw new $e;
-			}
+			throw $e;
 		}
 	}
 
-	/**
-	 * 重链接数据库
-	 *
-	 * @return bool
-	 */
-	public function reconnect() {
-		if ( $this->reconnect_num < 3 ) {
-			Log::log( '重链接数据库 ' . $this->reconnect_num );
-			$this->PDOConnect->setDb( false );
-			$this->reconnect_num ++;
-			if ( $this->connect() ) {
-				$this->reconnect_num = 0;
-
-				return true;
-			}
-		}
-
-		return false;
-	}
 
 	/**
 	 *过滤数据
@@ -513,8 +490,8 @@ class PtPDO {
 	 * @param       $data
 	 * @param false $filter_null
 	 *
-	 * @return false|string
-	 * @throws \Bin\Exception\DBException
+	 * @return false
+	 * @throws \PTLibrary\Exception\DBException
 	 */
 	public function add( $data, $filter_null = false ) {
 
@@ -533,13 +510,11 @@ class PtPDO {
 			}
 			$this->getInsertInto( $data );
 			$this->_lastExecuteData = $data;
-			$sth=$this->exeCuteSqlData($this->InsertPrepare,$data);
-			//$lastInsertId=$this->db->lastInsertId();
-			//$sth->closeCursor();
-			//return $lastInsertId;
+			$res                    = $this->exeCuteSqlData( $this->InsertPrepare, $data, self::EXECUTE_TYPE_INSERT );
+
 		} catch ( \Exception $e ) {
 
-				ThrowException::DBException( ErrorHandler::DB_INSERT_FAIL, $e->getMessage() );
+			ThrowException::DBException( ErrorHandler::DB_INSERT_FAIL, $e->getMessage() );
 
 		}
 
@@ -674,14 +649,10 @@ class PtPDO {
 
 					$sql = "UPDATE {$fullTable} set $fieldStr {$where}";
 
-					$this->prepare( $sql );
-					if ( $this->sth->execute( $this->selectData ) ) {
-						$rows = $this->sth->rowCount();
-						$this->sth->closeCursor();
-						$this->clearCondition();
+					$sth  = $this->exeCuteSqlData( $sql, $this->selectData );
+					$rows = $sth->rowCount();
 
-						return $rows;
-					};
+					return $rows;
 				}
 			} else {
 				Log::error( '字段类型不符合' );
@@ -689,10 +660,9 @@ class PtPDO {
 
 			return false;
 		} catch ( \Exception $e ) {
-			if ( ! $this->tryReconnect( $e ) ) {
-				throw new DBException( ErrorHandler::DB_SAVE_FAIL,
-					'sql:' . $this->getLastSql() . '; error_code:' . $e->getCode() . ' , message:' . $e->getMessage() );
-			}
+			Log::error( 'sql:' . $this->getLastSql() );
+			throw new DBException( ErrorHandler::DB_SAVE_FAIL, $e->getMessage() );
+
 		}
 
 	}
@@ -712,65 +682,46 @@ class PtPDO {
 	 * @param int|float    $step  自增数值
 	 *
 	 * @return bool|int|mixed|string
-	 * @throws \Bin\Exception\DBException
+	 * @throws \PTLibrary\Exception\DBException
 	 */
 	public function setAutoInc( $field, $step = 1 ) {
-		try {
 
-			if ( ! $field ) {
-				return false;
-			}
-			$insertData = [];
-			$updateData = [];
-			$this->getWhere();
-			//把where数据加到insert数组中
 
-			if ( is_array( $field ) ) {
-				foreach ( $field as $_field => $_step ) {
-					$updateData[ $_field ] = [ 'expression', $_field . ' + ' . floatval( $_step ) ];
-					$insertData[ $_field ] = floatval( $_step );
-				}
-
-			} else if ( is_string( $field ) ) {
-				$updateData[ $field ] = [ 'expression', $field . ' + ' . $step ];
-				$insertData[ $field ] = floatval( $step );
-			}
-			$this->setPrepareData( $updateData );//先生成更新的sql
-
-			$updateSql = $this->UpdatePrepare;
-			$updateSql = str_replace( 'UPDATE ' . $this->getFullTableName() . ' SET', 'UPDATE', $updateSql );
-			foreach ( $this->selectData as $w_key => $w_value ) {
-				$_data_key                = substr( $w_key, 3 );
-				$insertData[ $_data_key ] = $w_value;
-			}
-			$this->setPrepareData( $insertData );//再生成insert sql
-			$sql = "{$this->InsertPrepare} ON DUPLICATE KEY {$updateSql}";
-			$this->prepare( $sql );
-			//Log::log( $sql );
-			//Log::log( $insertData);
-			$this->_lastExecuteData = $insertData;
-
-			if ( ! $insertData ) {
-				$this->db->query( $sql );
-				$res = $this->db->lastInsertId();
-				$res || $res = $this->sth->rowCount();
-
-				return $res;
-			} else if ( $this->execute( $insertData ) ) {
-				$res = $this->db->lastInsertId();
-				$res || $res = $this->sth->rowCount();
-
-				return $res;
-			} else {
-				return false;
-			}
-		} catch ( \Exception $e ) {
-			if ( $this->tryReconnect( $e ) ) {
-				return $this->add( $insertData );
-			} else {
-				ThrowException::DBException( ErrorHandler::DB_INSERT_FAIL, $e->getMessage() );
-			}
+		if ( ! $field ) {
+			return false;
 		}
+		$insertData = [];
+		$updateData = [];
+		$this->getWhere();
+		//把where数据加到insert数组中
+
+		if ( is_array( $field ) ) {
+			foreach ( $field as $_field => $_step ) {
+				$updateData[ $_field ] = [ 'expression', $_field . ' + ' . floatval( $_step ) ];
+				$insertData[ $_field ] = floatval( $_step );
+			}
+
+		} else if ( is_string( $field ) ) {
+			$updateData[ $field ] = [ 'expression', $field . ' + ' . $step ];
+			$insertData[ $field ] = floatval( $step );
+		}
+		$this->setPrepareData( $updateData );//先生成更新的sql
+
+		$updateSql = $this->UpdatePrepare;
+		$updateSql = str_replace( 'UPDATE ' . $this->getFullTableName() . ' SET', 'UPDATE', $updateSql );
+		foreach ( $this->selectData as $w_key => $w_value ) {
+			$_data_key                = substr( $w_key, 3 );
+			$insertData[ $_data_key ] = $w_value;
+		}
+		$this->setPrepareData( $insertData );//再生成insert sql
+		$sql                    = "{$this->InsertPrepare} ON DUPLICATE KEY {$updateSql}";
+		$this->_lastExecuteData = $insertData;
+
+		$res = $this->exeCuteSqlData( $sql, $insertData, self::EXECUTE_TYPE_UPDATE );
+
+		return $res;
+
+
 	}
 
 	/**
@@ -780,7 +731,8 @@ class PtPDO {
 		try {
 			$filed     = $this->getSelectField();
 			$fullTable = $this->getFullTableName();
-			$sql       = "SELECT $filed FROM $fullTable ";
+			$sql       = '';
+			$sql       .= "SELECT $filed FROM $fullTable ";
 			$join      = $this->getJoin();
 			$join && $sql .= $join;
 			$where      = $this->getWhere();
@@ -802,10 +754,7 @@ class PtPDO {
 
 			$this->_lastExecuteData = $selectData;
 
-			$sth = $this->exeCuteSqlData( $sql, $selectData );
-
-			$res = $sth->fetchAll();
-			$sth->closeCursor();
+			$res = $this->exeCuteSqlData( $sql, $selectData, self::EXECUTE_TYPE_SELECT );
 			$this->clearCondition();
 			if ( $this->_res_index_field ) {
 				$new_res = [];
@@ -829,11 +778,7 @@ class PtPDO {
 			Log::error(
 				'查询异常：sql:' . $this->getLastSql() . '; ' . $e->getCode() . $e->getMessage() . ';' . print_r( $selectData, true )
 			);
-			if ( ! $this->tryReconnect( $e ) ) {
-				ThrowException::DBException( ErrorHandler::DB_SELECT_FAIL );
-			} else {
-				return $this->select();
-			}
+			ThrowException::DBException( ErrorHandler::DB_SELECT_FAIL );
 		}
 
 	}
@@ -842,11 +787,12 @@ class PtPDO {
 	 * 清除查询条件
 	 */
 	public function clearCondition() {
-		$this->_filed = [];
-		$this->_limit = [];
-		$this->_order = [];
-		$this->_group = [];
-		$this->_where = [];
+		$this->_filed    = [];
+		$this->_limit    = [];
+		$this->_order    = [];
+		$this->_group    = [];
+		$this->_where    = [];
+		$this->sql_sleep = 0;
 	}
 
 	public function find() {
@@ -905,7 +851,7 @@ class PtPDO {
 
 		if ( is_array( $this->_order ) && $this->_order ) {
 			foreach ( $this->_order as $key => $val ) {
-				$temp[] = " `$key` " . ( ( is_string( $val ) ) ? $val : ( $val === ( - 1 ) ) ? 'ASC' : 'DESC' );
+				$temp[] = " `$key` " . ( ( is_string( $val ) ) ? $val : ( ( $val === ( - 1 ) ) ? 'ASC' : 'DESC' ) );
 			}
 			$str = ' ORDER BY ' . implode( ',', $temp );
 
@@ -1075,19 +1021,14 @@ class PtPDO {
 	public function getDBs() {
 
 		$sql = 'show databases';
-		$sth = $this->exeCuteSqlData($sql);
-		if ( $sth ) {
-			$dbs = [];
-			$res=$sth->fetchAll();
-			print_r( $res );
-			foreach ( $res as $row ) {
-				$dbs[ $row['Database'] ] = $row['Database'];
-			}
+		$res = $this->exeCuteSqlData( $sql );
 
-			return $dbs;
+		$dbs = [];
+		foreach ( $res as $row ) {
+			$dbs[ $row['Database'] ] = $row['Database'];
 		}
 
-		return false;
+		return $dbs;
 	}
 
 
@@ -1099,26 +1040,17 @@ class PtPDO {
 	 * @return bool|\PDOStatement
 	 */
 	public function query( $sql ) {
-		try {
-			$this->addSqlHistory( $sql );
-			$res = $this->getDB()->query( $sql );
-			PDO::getInstance()->close( $this->db );
+		$this->addSqlHistory( $sql );
+		$pdo = \PTLibrary\DB\Connect\PDO::getInstance()->getConnection();
+		$res = $pdo->exec( $sql );
+		PDO::getInstance()->close( $pdo );
 
-			var_dump( $res );
-
-			return $res;
-		} catch ( \Exception $e ) {
-			if ( $this->tryReconnect( $e ) ) {
-				return $this->query( $sql );
-			}
-		}
-
-		return false;
+		return $res;
 	}
 
 	/**
 	 * @return string
-	 * @throws \Bin\Exception\DBException
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function getFullTableName() {
 		if ( empty( $this->_table ) ) {
@@ -1161,7 +1093,6 @@ class PtPDO {
 	}
 
 
-
 	/**
 	 *设置搜索条件
 	 *
@@ -1178,66 +1109,41 @@ class PtPDO {
 	/**
 	 * 返回记录数量
 	 *
-	 * @return bool|int
-	 * @throws \Exception
+	 * @return false|int|mixed
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function count() {
-		try {
-			$where = $this->getWhere();
-			$sql   = "select count(*) as count from " . $this->getFullTableName();
-			if ( $where ) {
-				$sql .= $where;
-			}
-			$this->prepare( $sql );
-			$rs = $this->execute( $this->selectData );
-			if ( $rs ) {
-				$res = $this->sth->fetch();
 
-				return intval( $res['count'] );
-			}
-
-			return false;
-		} catch ( \Exception $e ) {
-
-			if ( $res = $this->tryReconnect( $e ) ) {
-
-				return $this->count();
-			} else {
-				throw $e;
-			}
+		$where = $this->getWhere();
+		$sql   = "select count(*) as count from " . $this->getFullTableName();
+		if ( $where ) {
+			$sql .= $where;
 		}
+		$sth = $this->exeCuteSqlData( $sql, $this->selectData );
+		$res = $sth->fetch();
+		$sth->closeCursor();
+
+		return $res;
 
 	}
 
 	/**
 	 * 删除数据
 	 *
-	 * @return bool|int
-	 * @throws \Bin\Exception\DBException
+	 *
+	 * @return false
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function delete() {
-		try {
-			$fullTable = $this->getFullTableName();
-			$where     = $this->getWhere();
-			if ( $where ) {
-				$sql = "DELETE FROM $fullTable $where";
-				$this->prepare( $sql );
-				//$this->query( $sql );
-				if ( $this->execute( $this->selectData ) ) {
-					$return = $this->sth->rowCount();
+		$fullTable = $this->getFullTableName();
+		$where     = $this->getWhere();
+		if ( $where ) {
+			$sql = "DELETE FROM $fullTable $where";
+			$sth = $this->exeCuteSqlData( $sql, $this->selectData );
+			$res = $sth->fetch();
+			$sth->closeCursor();
 
-					return $return;
-				} else {
-					return false;
-				}
-			}
-
-			return false;
-		} catch ( \Exception $e ) {
-			Log::error( $e->getMessage() );
-			if ( ! $this->tryReconnect( $e ) ) {
-				throw new DBException( ErrorHandler::DB_DELETE_FAIL );
-			}
+			return $res;
 		}
 
 	}
@@ -1245,67 +1151,76 @@ class PtPDO {
 	/**
 	 * @param $data
 	 *
-	 * @return bool|int
-	 * @throws \Bin\Exception\DBException
+	 * @return array|bool
+	 * @throws \PTLibrary\Exception\DBException
 	 */
 	public function save( $data ) {
-		try {
-			$this->setPrepareData( $data );
-			$where     = $this->getWhere();
-			$whereData = $this->selectData;
-			if ( is_array( $data ) ) {
-				$data = array_merge( $data, $whereData );
-			} else {
-				return true;
-			}
-			$sql = "{$this->UpdatePrepare} $where";
-			$this->prepare( $sql );
-			$this->_lastExecuteData = $data;
-			$res                    = $this->sth->execute( $data );
-			$this->clearCondition();
-			if ( $res ) {
-				return $this->sth->rowCount();
-			}
+		$this->setPrepareData( $data );
+		$where     = $this->getWhere();
+		$whereData = $this->selectData;
+		if ( is_array( $data ) ) {
+			$data = array_merge( $data, $whereData );
+		} else {
+			return true;
+		}
+		$sql                    = "{$this->UpdatePrepare} $where";
+		$this->_lastExecuteData = $data;
+		$res                    = $this->exeCuteSqlData( $sql, $data, self::EXECUTE_TYPE_UPDATE );
 
-			return false;
-		} catch ( \Exception $e ) {
-			throw new DBException( ErrorHandler::DB_SAVE_FAIL,
-				'SQL:' . $this->getLastSql() . '; Data:' . print_r( $data, true ) . $e->getMessage() );
+		return $res;
+
+	}
+
+
+
+	public function beginTransaction(): void
+	{
+		if ($this->in_transaction) { //嵌套事务
+			throw new DBException('do not support nested transaction now',200100);
+		}
+		$this->realGetConn();
+		$this->_pdo->beginTransaction();
+		$this->in_transaction = true;
+		Coroutine::defer(function () {
+			if ($this->in_transaction) {
+				$this->rollBack();
+			}
+		});
+	}
+
+	public function commit(): void
+	{
+		$this->_pdo->commit();
+		$this->in_transaction = false;
+		$this->release($this->_pdo);
+	}
+
+	public function rollBack(): void
+	{
+		$this->_pdo->rollBack();
+		$this->in_transaction = false;
+		$this->release($this->_pdo);
+	}
+
+	private function realGetConn()
+	{
+		if (! $this->in_transaction) {
+			$this->_pdo = $this->pool->getConnection();
+		}
+	}
+
+	public function release($connection = null)
+	{
+		if ($connection === null) {
+			$this->in_transaction = false;
 		}
 
-	}
+		if (! $this->in_transaction) {
+			$this->pool->close($connection);
+			return true;
+		}
 
-	/**
-	 * 最后执行的数据
-	 *
-	 * @return array
-	 *
-	 */
-	public function getLastExecuteData() {
-		return $this->_lastExecuteData;
-	}
-
-	/**
-	 * 开启事务
-	 */
-	public function beginTransaction() {
-		$this->db->beginTransaction();
-	}
-
-	/**
-	 * 提交事务
-	 *
-	 * @return bool
-	 */
-	public function commit() {
-		return $this->db->commit();
-	}
-
-	/**
-	 * 回滚事务
-	 */
-	public function rollback() {
-		$this->db->rollBack();
+		return false;
 	}
 
 	/**
@@ -1394,9 +1309,7 @@ class PtPDO {
 
 
 	/**
-	 *
-	 *
-	 * @return null|string
+	 * @return string|null
 	 */
 	public function getWhere() {
 		$this->selectData = [];

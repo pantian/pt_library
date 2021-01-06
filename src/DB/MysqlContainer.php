@@ -17,9 +17,9 @@ use Bin\Log\Log;
 use SplObserver;
 use Bin\Tool\JSON;
 use Bin\Tool\Tool;
-use Bin\Verify\MinVerify;
-use Bin\Verify\VerifyFactory;
-use Bin\Verify\VerifyRule;
+use PTLibrary\Verify\MinVerify;
+use PTLibrary\Verify\VerifyFactory;
+use PTLibrary\Verify\VerifyRule;
 
 
 /**

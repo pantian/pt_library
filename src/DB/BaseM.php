@@ -5,6 +5,12 @@ namespace PTLibrary\DB;
 
 
 
+use PTLibrary\Error\ErrorHandler;
+use PTLibrary\Exception\ThrowException;
+use PTLibrary\Log\Log;
+use PTLibrary\Tool\Request;
+use SebastianBergmann\CodeCoverage\Report\PHP;
+
 /**
  * 数据模型基类
  * Class BaseModel
@@ -70,12 +76,12 @@ class BaseM extends IModelInterface {
 	function __construct( $table = null ) {
 		$table && $this->_table = $table;
 		$this->_table && $this->setTable( $this->_table );
-		$this->PDO=PtPDO::getInstance();
+
 
 	}
 
 	public function init() {
-
+		$this->PDO=PtPDO::getInstance();
 
 	}
 
@@ -106,15 +112,14 @@ class BaseM extends IModelInterface {
 	}
 
 	public function __destruct() {
+
 		unset( $this->PDO );
 		unset( $this->_entity );
-
-		//Log::debug( 'unset ' . self::class );
 	}
 
 	public function __clone() {
 
-		$this->setTable( $this->_table );
+		$this->init();
 
 	}
 
@@ -159,7 +164,7 @@ class BaseM extends IModelInterface {
 	 * @return bool|null
 	 */
 	public function getCurrentPage() {
-		$page = (int) Request::get( $this->_pageUrl_key );
+		$page = (int) Request::instance()->get($this->_pageUrl_key);
 		$page || $page = $this->_currentPage;
 		$this->getTotalPage();
 		if ( $page <= 0 ) {
@@ -178,7 +183,7 @@ class BaseM extends IModelInterface {
 	 * @return int
 	 */
 	public function getPageSize() {
-		$pageSize = (int) Request::get( $this->_page_size_key, $this->_pageSize );
+		$pageSize = (int) Request::instance()->get($this->_page_size_key,$this->_pageSize);
 		$pageSize || $pageSize = 20;
 
 		return $pageSize;
@@ -244,7 +249,6 @@ class BaseM extends IModelInterface {
 
 			$this->PDO->setTable( $this->_table );
 
-
 			if ( $this->PDO->table_exists() ) {
 				$this->getFieldArr();
 				$this->fullTableName || $this->fullTableName = $this->PDO->getFullTableName();
@@ -258,10 +262,13 @@ class BaseM extends IModelInterface {
 	}
 
 	/**
-	 * @throws \Exception\DBException
+	 *
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function getFieldArr() {
 		$this->fieldArr = $this->PDO->getFields();
+
+		return $this->fieldArr;
 	}
 
 	/**
@@ -280,7 +287,7 @@ class BaseM extends IModelInterface {
 	/**
 	 * 设置实体实例对象
 	 *
-	 * @param \DB\MysqlEntity $mysqlEntity
+	 * @param \PTLibrary\DB\MysqlEntity $mysqlEntity
 	 *
 	 * @return $this
 	 */
@@ -313,7 +320,7 @@ class BaseM extends IModelInterface {
 	 * @return array|null
 	 */
 	public function getTables() {
-		return $this->PDO->getTables();
+		return $this->PDO->getAllTables();
 	}
 
 	/**
@@ -386,6 +393,11 @@ class BaseM extends IModelInterface {
 		return $this;
 	}
 
+	public function sleep($time=0){
+		$this->PDO->sleep( $time );
+		return $this->PDO;
+	}
+
 	/**
 	 * 插入数据
 	 *
@@ -404,12 +416,10 @@ class BaseM extends IModelInterface {
 			unset( $this->FieldData[ $this->PK ] );
 		}
 		$this->VerifyRule();
-		$id = $this->PDO->add( $this->FieldData, $filter_null );
-
+		$id=$this->PDO->add( $this->FieldData, $filter_null );
 		if($id===false){
-		    ThrowException::SystemException(ErrorHandler::DB_INSERT_FAIL);
+			ThrowException::SystemException(ErrorHandler::DB_INSERT_FAIL);
 		}else {
-
 			$this->addAfter( $id );
 		}
 
@@ -512,11 +522,10 @@ class BaseM extends IModelInterface {
 	/**
 	 *  通过数组一次插入多条数据
 	 *
-	 *
 	 * @param array $data
 	 *
 	 * @return bool
-	 * @throws \Exception\DBException
+	 * @throws \PTLibrary\Exception\DBException
 	 */
 	public function addAll( $data = array() ) {
 		foreach ( $data as $_data ) {
@@ -576,14 +585,12 @@ class BaseM extends IModelInterface {
 	}
 
 	/**
-	 *  通过某个字段来查找一条数据
-	 *
+	 *通过某个字段来查找一条数据
 	 *
 	 * @param $Attribute
 	 * @param $value
 	 *
 	 * @return bool|mixed
-	 * @throws \Exception\DBException
 	 */
 	public function findByAttribute( $Attribute, $value ) {
 
@@ -593,12 +600,11 @@ class BaseM extends IModelInterface {
 	/**
 	 *  通过某个字段来查找多条数据
 	 *
-	 *
 	 * @param $Attribute
 	 * @param $value
 	 *
 	 * @return mixed
-	 * @throws \Exception\DBException
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function findAllByAttribute( $Attribute, $value ) {
 		return $this->where( array( $Attribute => $value ) )->select();
@@ -715,25 +721,12 @@ class BaseM extends IModelInterface {
 		return $this;
 	}
 
-	/**
-	 * 选择数据库
-	 *
-	 * @param null $dbName
-	 *
-	 * @return $this
-	 */
-	public function selectDB( $dbName = null ) {
-		$dbName || $dbName = $this->DBName;
-		$this->PDO->selectDB( $dbName );
-
-		return $this;
-	}
 
 	/**
 	 * 获取全表名
 	 *
 	 * @return string
-	 * @throws \Exception\DBException
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function getFullTableName() {
 		return $this->PDO->getFullTableName();
@@ -746,6 +739,12 @@ class BaseM extends IModelInterface {
 	 *
 	 * @throws DBException
 	 * @return mixed
+	 */
+	/**
+	 * @param array $where
+	 *
+	 * @return array
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function select( $where = array() ) {
 		try {
@@ -788,11 +787,13 @@ class BaseM extends IModelInterface {
 	 *
 	 * @param null $size
 	 * @param bool $notGetCount
+	 *
 	 * @return mixed
-	 * @throws \Exception\DBException
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function findPage( $size = null ,$notGetCount=true) {
-		$size || $size = Request::getSafe( $this->_page_size_key );
+
+		$size || $size =Request::instance()->get( $this->_page_size_key );
 		$size || $size = 20;
 		$this->_isGetTotalPage =$notGetCount;
 		$this->pageEnable = true;
@@ -820,8 +821,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @param null $where
 	 *
-	 * @return bool|mixed
-	 * @throws \Exception\DBException
+	 * @return false|mixed
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function find( $where = null ) {
 
@@ -836,9 +837,6 @@ class BaseM extends IModelInterface {
 		return false;
 	}
 
-	public function getOne() {
-		return $this->find();
-	}
 
 	/**
 	 * 设置表格
@@ -989,11 +987,11 @@ class BaseM extends IModelInterface {
 	 * @param array  $data
 	 * @param string $where
 	 *
-	 * @return bool|int|mixed
-	 * @throws \Bin\Exception\DBException
+	 * @return bool|mixed
+	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function save( $data = array(), $where = '' ) {
-		try {
+
 			$this->setFieldData( $data );
 			if ( $this->PKV ) {
 				empty( $where ) && $where = array( $this->getPK() => $this->PKV );
@@ -1018,11 +1016,7 @@ class BaseM extends IModelInterface {
 			}
 
 			return false;
-		} catch ( FieldVerifyException $exception ) {
-			FieldVerifyException::throwException( $exception->getMessage() );
-		} catch ( \Exception $e ) {
-			throw new DBException( ErrorHandler::DB_SAVE_FAIL, $e->getMessage() );
-		}
+
 
 	}
 
@@ -1268,17 +1262,10 @@ class BaseM extends IModelInterface {
 	}
 
 	/**
-	 * 提交事务
-	 *
-	 *
 	 * @return bool
-	 * @throws \Exception\OrderException
 	 */
 	public function commit() {
 		$res = $this->PDO->commit();
-		if ( false === $res ) {
-			ThrowException::OrderException( ErrorHandler::DB_COMMIT_FAIL );
-		}
 
 		return $res;
 	}
