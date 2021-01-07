@@ -14,8 +14,10 @@ use PTFramework\Factory\InstanceFactory;
  * @package PTFramework\Tool
  */
 class Response {
-
-	protected \Swoole\Http\Response $swooleResponse;
+	/**
+	 * @var \Swoole\Http\Response
+	 */
+	protected  $swooleResponse;
 
 	public static function instance(\Swoole\Http\Response $response){
 		$key = '__response';
