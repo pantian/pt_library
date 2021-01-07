@@ -241,9 +241,9 @@ class BaseM extends IModelInterface {
 	 * @return $this
 	 * @throws DBException
 	 */
-	public function setTable( $table ) {
+	public function setTable( string $table ) {
 
-		$table && $this->_table = $table;
+		$this->_table=$table;
 
 		if ( $this->_table ) {
 

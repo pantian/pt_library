@@ -369,7 +369,8 @@ class PtPDO {
 			return true;
 		}
 		$tables = self::getAllTables();
-
+		print_r( $tables );
+		print_r($this->_table);
 		if ( isset( $tables[ $this->_table ] ) ) {
 			self::$_is_hased_table = true;
 
@@ -1082,7 +1083,7 @@ class PtPDO {
 	 *
 	 * @return bool
 	 */
-	public function setTable( $table, $as = null ) {
+	public function setTable( string $table, $as = null ) {
 
 		if ( $table ) {
 			$this->_table = $table;
