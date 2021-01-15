@@ -43,7 +43,10 @@ abstract class Entity
      * @var bool
      */
     protected $_relevance = false;
-
+    /**
+     * @var \DB\Mongodb\Container|null
+     */
+    protected $_container;
 	/**
 	 * 是否字段验证
 	 * @var bool
@@ -64,6 +67,28 @@ abstract class Entity
 
     public function __destruct() {
 	    unset( $this->_container );
+    }
+
+	/**
+     * 字段查询，获取数据，并赋给实体对象
+     *
+     * @param $field
+     * @param $filed_value
+     *
+     * @return bool
+     */
+    public function getInfoBy( $field , $filed_value )
+    {
+        if ( $field ) {
+            $info = $this->getContainer()->getModel()->where( [$field => $filed_value] )->getOne();
+            if ( $info ) {
+                $this->setData( $info );
+
+                return true;
+            }
+        }
+
+        return false;
     }
 
 	/**
@@ -319,7 +344,15 @@ abstract class Entity
         return $this->_container->getAll();
     }
 
-
+    /**
+     * 获取容器
+     *
+     * @return \DB\Mongodb\Container|null
+     */
+    function getContainer()
+    {
+        return $this->_container;
+    }
 
     /**
      * 按字段名添加数量

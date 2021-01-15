@@ -262,6 +262,19 @@ class BaseM extends IModelInterface {
 	}
 
 	/**
+	 * 返回创建表sql
+	 * @throws \PTLibrary\DB\DBException
+	 * @throws \PTLibrary\Exception\DBException
+	 */
+	public function showCreateTable(){
+		$res=$this->PDO->showCreateTable();
+		if ( is_array( $res ) ) {
+			return current( $res );
+		}
+	}
+
+
+	/**
 	 *
 	 * @throws \PTLibrary\DB\DBException
 	 */
@@ -284,6 +297,16 @@ class BaseM extends IModelInterface {
 		return $this->_table;
 	}
 
+	/**
+	 * 返回表的索引表
+	 *
+	 * @return array
+	 * @throws \PTLibrary\DB\DBException
+	 * @throws \PTLibrary\Exception\DBException
+	 */
+	public function getIndexs(){
+	    return $this->PDO->getIndexs();
+	}
 	/**
 	 * 设置实体实例对象
 	 *

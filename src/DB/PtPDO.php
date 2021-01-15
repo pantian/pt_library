@@ -137,7 +137,7 @@ class PtPDO {
 	/**
 	 * @var \PDO
 	 */
-	protected $_pdo;
+	public $_pdo;
 
 	private $in_transaction = false;
 
@@ -336,6 +336,7 @@ class PtPDO {
 	function exeCuteSqlData( $sql, $data = [], $type = self::EXECUTE_TYPE_SELECT ) {
 		$this->addSqlHistory( $sql );
 		$this->realGetConn();
+
 		$statement = $this->_pdo->prepare( $sql );
 		$statement->setFetchMode( \PDO::FETCH_ASSOC );
 		if ( $statement->execute( $data ) === false ) {
@@ -359,6 +360,19 @@ class PtPDO {
 	}
 
 	/**
+	 * 返回表的索引表
+	 * @return array
+	 * @throws \PTLibrary\DB\DBException
+	 * @throws \PTLibrary\Exception\DBException
+	 */
+	public function getIndexs(){
+	    $sql='SHOW INDEXES FROM '.$this->getFullTableName();
+	    $indexs=$this->exeCuteSqlData($sql);
+
+		return $indexs;
+	}
+
+	/**
 	 * 检测表是否存在
 	 *
 	 *
@@ -369,8 +383,7 @@ class PtPDO {
 			return true;
 		}
 		$tables = self::getAllTables();
-		print_r( $tables );
-		print_r($this->_table);
+
 		if ( isset( $tables[ $this->_table ] ) ) {
 			self::$_is_hased_table = true;
 
@@ -379,6 +392,28 @@ class PtPDO {
 
 		return false;
 
+	}
+
+	/**
+	 * 显示创建表结构
+	 * @throws \PTLibrary\DB\DBException
+	 * @throws \PTLibrary\Exception\DBException
+	 */
+	public function showCreateTable(){
+		$table=$this->getFullTableName();
+		$sql="show create table $table";
+		$res=$this->exeCuteSqlData( $sql );
+
+		return $res;
+	}
+
+
+
+	/**
+	 * @return \PDO
+	 */
+	public function getPdo(){
+		return $this->_pdo;
 	}
 
 	/**
@@ -1203,10 +1238,13 @@ class PtPDO {
 		$this->release($this->_pdo);
 	}
 
-	private function realGetConn()
+	public function realGetConn()
 	{
 		if (! $this->in_transaction) {
 			$this->_pdo = $this->pool->getConnection();
+			if($this->_pdo===false){
+			    ThrowException::DBException(223330,'没有mysql链接');
+			}
 		}
 	}
 
