@@ -8,8 +8,8 @@
 
 namespace PTLibrary\Verify;
 
-use PTLibrary\Error\ErrorHandler;
-use PTLibrary\Exception\VerifyException;
+use \PTLibrary\Error\ErrorHandler;
+
 
 /**
  * 最小值校验类

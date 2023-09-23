@@ -3,6 +3,8 @@
 namespace PTLibrary\Result;
 
 
+use PTLibrary\Factory\InstanceFactory;
+use PTLibrary\Tool\Context;
 use PTLibrary\Tool\JSON;
 use PTLibrary\Tool\Tool;
 
@@ -53,6 +55,9 @@ class Result {
 	    $this->data['_request_id']=$id;
 	}
 
+	public function getReuestId(){
+	    return $this->data['_request_id'];
+	}
 
 	/**
 	 * 设置所有数据，全新的data
@@ -63,6 +68,9 @@ class Result {
 		$this->data = $data;
 	}
 
+	public function setAction($action){
+	    $this->data['action']=$action;
+	}
 	/**
 	 * 设置数据
 	 * this->data[$key]=$val
@@ -135,17 +143,34 @@ class Result {
 
 			return JSON::encode( $this->data );
 		}
-		return false;
+		return '';
 	}
 
 	public function __toString() {
 		return $this->getJson();
 	}
 
+	static $instanceKey='resultInstance';
+	static $_instance=null;
 	static function Instance() {
-		if ( ! self::$instance ) {
-			self::$instance=new self();
+		if(!self::$_instance)self::$_instance=new self();
+
+		$instance =Context::get(self::$instanceKey);
+		if ( ! $instance ) {
+			$instance=InstanceFactory::cloneInstance(self::class);
+			Context::set(self::$instanceKey,$instance);
 		}
-		return clone self::$instance;
+
+		//$instance->set('cid',\Swoole\Coroutine::getCid());
+		return $instance;
 	}
+
+	/**
+	 * 协程结束，释放对象
+	 * @return void
+	 */
+	public static function destroy(){
+	    Context::destroy(self::$instanceKey);
+	}
+
 }

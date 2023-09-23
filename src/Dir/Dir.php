@@ -126,6 +126,40 @@ final class Dir
 	}
 
 	/**
+	 * 遍历目录下的所有文件
+	 *
+	 * @param null $dirName
+	 *
+	 * @return array
+	 */
+	static public function getAllFile($dirName = null)
+	{
+		if ( !$dirName ) {
+			$dirName = '.';
+		}
+		$files=[];
+		$dirPath = self::dirPath($dirName);
+		if($handle = opendir($dirPath)){
+			while (false !== ($file = readdir($handle))){
+				if($file!='.'&&$file!='..'){
+					$_f=$dirPath.$file;
+					if(is_dir($_f)){
+						$files=array_merge($files,self::getAllFile($_f));
+					}elseif(is_file($_f)){
+						$files[]=$_f;
+					}
+				}
+
+			}
+			closedir($handle);
+		}
+
+		return $files;
+	}
+
+
+
+	/**
 	 * 删除目录及文件，支持多层删除目录
 	 *
 	 * @param string $dirName 目录名

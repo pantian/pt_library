@@ -8,8 +8,9 @@
 
 namespace PTLibrary\Verify;
 
-use Bin\Error\ErrorHandler;
-use Bin\Exception\VerifyException;
+use \PTLibrary\Error\ErrorHandler;
+
+
 /**
  * 邮箱校验
  * Class EmailVerify
@@ -30,6 +31,8 @@ class EmailVerify implements Verify {
 		if ( ! preg_match( $pattern, $verifyRule->value ) ) {
 			$verifyRule->error || $verifyRule->error= $verifyRule->getDes(). '格式无效' ;
 			throw new VerifyException( ErrorHandler::VERIFY_EMAIL_INVALID, $verifyRule->error );
+
+
 		}
 
 		return true;

@@ -9,7 +9,11 @@
 namespace PTLibrary\Log;
 
 
+use Co\System;
 use PTFramework\Config;
+use PTLibrary\Exception\FieldVerifyException;
+use PTLibrary\Tool\Dir;
+use PTLibrary\Tool\Tool;
 use Swoole\Table\Row;
 
 class Log {
@@ -23,7 +27,7 @@ class Log {
 	 */
 	public static function log($msg) {
 
-		self::setPath();
+//		self::setPath();
 
 		if (!is_string($msg)) {
 			$msg = print_r($msg, true);
@@ -31,21 +35,30 @@ class Log {
 		if(class_exists('Seaslog')){
 
 			\SeasLog::info(PHP_EOL.$msg);
+		}else{
+			if(!is_dir(self::$logPath)){
+				Dir::create(self::$logPath);
+			}
+			$file=self::$logPath.date('Y-m-d').'.log';
+
+//			print_r($file);
+			file_put_contents($file, date('Y-m-d H:i:s').'  '.$msg.PHP_EOL,FILE_APPEND);
+
 		}
 		unset($msg);
 	}
 
 
-	private static function setPath(){
+	public static function setPath(){
 		if ( ! self::$logPath ) {
 			$serverConfig=Config::getInstance()->getServersConfig();
-			$path=$serverConfig['app_log_path']??BASE_PATH.'/logs/';
+			$path=$serverConfig['app_log_path']??BASE_PATH.'/logs';
 			self::$logPath=$path;
 			if(class_exists('Seaslog')){
 				\SeasLog::setBasePath( self::$logPath );
 
 			}else{
-				print_r('Seaslog extends is not fund');
+//				print_r('Seaslog extends is not fund');
 			}
 		}
 	}

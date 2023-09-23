@@ -3,19 +3,21 @@
 namespace PTLibrary\DB;
 
 
-
-
+use PTLibrary\DB\Observer\MysqlObserverInterface;
+use PTLibrary\DB\Observer\MysqlSuboject;
 use PTLibrary\Error\ErrorHandler;
 use PTLibrary\Exception\ThrowException;
 use PTLibrary\Log\Log;
 use PTLibrary\Tool\Request;
+use PTLibrary\Tool\Tool;
 use SebastianBergmann\CodeCoverage\Report\PHP;
 
 /**
  * 数据模型基类
  * Class BaseModel
  */
-class BaseM extends IModelInterface {
+class BaseM extends IModelInterface
+{
 
 	public $fieldArr = null;
 	public $FieldData = array();
@@ -66,32 +68,58 @@ class BaseM extends IModelInterface {
 	 * 是否获取总条数,有时候join 查询时，获取总量时就有错误，此时就可以设置为 false
 	 * @var bool
 	 */
-	public $_isGetTotalPage=true;
+	public $_isGetTotalPage = true;
+
+	public $_mod_id;
 
 	/**
 	 * @var MysqlEntity
 	 */
 	public $_entity;
+	/**
+	 * 观察者控制器
+	 * @var MysqlSuboject
+	 */
+	protected $subObject;
 
-	function __construct( $table = null ) {
+
+	function __construct($table = null)
+	{
 		$table && $this->_table = $table;
-		$this->_table && $this->setTable( $this->_table );
-
-
+		$this->_table && $this->setTable($this->_table);
 	}
 
-	public function init() {
-		$this->PDO=PtPDO::getInstance();
+	public function init()
+	{
+		$this->PDO = PtPDO::getInstance();
+		$this->subObject = new MysqlSuboject();
+		$this->_mod_id = Tool::getRandChar(9);
+	}
 
+	public function attach(MysqlObserverInterface $mysqlObserver)
+	{
+		$this->subObject->attach($mysqlObserver);
+	}
+
+	public function getObservers()
+	{
+		return $this->subObject->getObserver();
+	}
+
+
+	public function clreaObserver()
+	{
+		$this->subObject->clear();
 	}
 
 	private static $instance;
 
-	public static function instance(){
-	    if(is_null(self::$instance)){
-	        self::$instance=new static();
-	    }
-	    return clone self::$instance;
+	public static function instance()
+	{
+		if (is_null(self::$instance)) {
+			self::$instance = new static();
+		}
+		return clone self::$instance;
 	}
 
 
@@ -103,30 +131,34 @@ class BaseM extends IModelInterface {
 	 * @param $name
 	 * @param $value
 	 */
-	public function __set( $name, $value ) {
-		if ( substr( $name, 0, 1 ) == '_' ) {
+	public function __set($name, $value)
+	{
+		if (substr($name, 0, 1) == '_') {
 			$this->$name = $value;
 		} else {
-			$this->FieldData[ $name ] = $value;
+			$this->FieldData[$name] = $value;
 		}
 	}
 
-	public function __destruct() {
+	public function __destruct()
+	{
 
-		unset( $this->PDO );
-		unset( $this->_entity );
+		unset($this->PDO);
+		unset($this->_entity);
 	}
 
-	public function __clone() {
+	public function __clone()
+	{
 
 		$this->init();
 
 	}
 
-	public function __get( $name ) {
+	public function __get($name)
+	{
 
-		if ( isset( $this->FieldData[ $name ] ) ) {
-			return $this->FieldData[ $name ];
+		if (isset($this->FieldData[$name])) {
+			return $this->FieldData[$name];
 		}
 
 		return null;
@@ -136,8 +168,9 @@ class BaseM extends IModelInterface {
 	/**
 	 * @param int $currentPage
 	 */
-	public function setCurrentPage( $currentPage ) {
-		if ( ! $currentPage ) {
+	public function setCurrentPage($currentPage)
+	{
+		if (!$currentPage) {
 			$currentPage = 1;
 		}
 		$this->_currentPage = $currentPage;
@@ -149,11 +182,12 @@ class BaseM extends IModelInterface {
 	 * @return float|int
 	 * @throws \Exception
 	 */
-	public function getTotalPage() {
-		if(!$this->_isGetTotalPage)return null;
-		$count            = $this->count();
-		$pageSize         = $this->getPageSize();
-		$this->_totalPage = ceil( $count / $pageSize );
+	public function getTotalPage()
+	{
+		if (!$this->_isGetTotalPage) return null;
+		$count = $this->count();
+		$pageSize = $this->getPageSize();
+		$this->_totalPage = ceil($count / $pageSize);
 
 		return $this->_totalPage;
 	}
@@ -163,13 +197,14 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return bool|null
 	 */
-	public function getCurrentPage() {
-		$page = (int) Request::instance()->get($this->_pageUrl_key);
+	public function getCurrentPage()
+	{
+		$page = (int)Request::instance()->input($this->_pageUrl_key);
 		$page || $page = $this->_currentPage;
 		$this->getTotalPage();
-		if ( $page <= 0 ) {
+		if ($page <= 0) {
 			$page = 1;
-		} else if ( $this->_totalPage && $page > $this->_totalPage ) {
+		} else if ($this->_totalPage && $page > $this->_totalPage) {
 			$page = $this->_totalPage;
 		}
 		$this->_currentPage = $page;
@@ -182,11 +217,12 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return int
 	 */
-	public function getPageSize() {
-		$pageSize = (int) Request::instance()->get($this->_page_size_key,$this->_pageSize);
-		$pageSize || $pageSize = 20;
+	public function getpagesize()
+	{
+		$pagesize = (int)request::instance()->input($this->_page_size_key, $this->_pagesize);
+		$pagesize || $pagesize = 20;
 
-		return $pageSize;
+		return $pagesize;
 	}
 
 	protected $_totalPage = 0;
@@ -196,12 +232,14 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return mixed
 	 */
-	public function getPageInfo() {
-		$info['current']     = $this->getCurrentPage();
-		$info['pageSize']    = $this->_pageSize;
+	public function getPageInfo()
+	{
+		$info['current'] = $this->getCurrentPage();
+		$info['pageSize'] = $this->_pageSize;
 		$info['countRecord'] = $this->_recordCount;
-		$info['totalPage']   = $this->_totalPage;
-		$this->_currentPage  = $info['current'];
+		$info['totalPage'] = $this->_totalPage;
+		$this->_currentPage = $info['current'];
+		print_r($info);
 
 		return $info;
 	}
@@ -229,7 +267,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @param boolean $DoVerifyRule
 	 */
-	public function setDoVerifyRule( $DoVerifyRule ) {
+	public function setDoVerifyRule($DoVerifyRule)
+	{
 		$this->DoVerifyRule = $DoVerifyRule;
 	}
 
@@ -241,20 +280,21 @@ class BaseM extends IModelInterface {
 	 * @return $this
 	 * @throws DBException
 	 */
-	public function setTable( string $table ) {
+	public function setTable(string $table)
+	{
 
-		$this->_table=$table;
+		$this->_table = $table;
 
-		if ( $this->_table ) {
+		if ($this->_table) {
 
-			$this->PDO->setTable( $this->_table );
+			$this->PDO->setTable($this->_table);
 
-			if ( $this->PDO->table_exists() ) {
+			if ($this->PDO->table_exists()) {
 				$this->getFieldArr();
 				$this->fullTableName || $this->fullTableName = $this->PDO->getFullTableName();
 				$this->PK = $this->PDO->PK;
 			} else {
-				ThrowException::DBException( ErrorHandler::DB_TABLE_EXIST, $this->PDO->getTable() . '不存在' );
+				ThrowException::DBException(ErrorHandler::DB_TABLE_EXIST, $this->PDO->getTable() . '不存在');
 			}
 		}
 
@@ -266,10 +306,11 @@ class BaseM extends IModelInterface {
 	 * @throws \PTLibrary\DB\DBException
 	 * @throws \PTLibrary\Exception\DBException
 	 */
-	public function showCreateTable(){
-		$res=$this->PDO->showCreateTable();
-		if ( is_array( $res ) ) {
-			return current( $res );
+	public function showCreateTable()
+	{
+		$res = $this->PDO->showCreateTable();
+		if (is_array($res)) {
+			return current($res);
 		}
 	}
 
@@ -278,7 +319,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @throws \PTLibrary\DB\DBException
 	 */
-	public function getFieldArr() {
+	public function getFieldArr()
+	{
 		$this->fieldArr = $this->PDO->getFields();
 
 		return $this->fieldArr;
@@ -287,13 +329,15 @@ class BaseM extends IModelInterface {
 	/**
 	 * @param bool $value
 	 */
-	public function ignoreTablePrefix( $value = true ) {
-		$this->_ignoreTablePrefix      = $value;
+	public function ignoreTablePrefix($value = true)
+	{
+		$this->_ignoreTablePrefix = $value;
 		$this->PDO->_ignoreTablePrefix = $value;
 		//$this->getFullTableName();
 	}
 
-	public function getTableName() {
+	public function getTableName()
+	{
 		return $this->_table;
 	}
 
@@ -304,9 +348,11 @@ class BaseM extends IModelInterface {
 	 * @throws \PTLibrary\DB\DBException
 	 * @throws \PTLibrary\Exception\DBException
 	 */
-	public function getIndexs(){
-	    return $this->PDO->getIndexs();
+	public function getIndexs()
+	{
+		return $this->PDO->getIndexs();
 	}
+
 	/**
 	 * 设置实体实例对象
 	 *
@@ -314,25 +360,28 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function setEntity( MysqlEntity $mysqlEntity ) {
+	public function setEntity(MysqlEntity $mysqlEntity)
+	{
 		$this->_entity = $mysqlEntity;
-		$pk            = $this->PK;
-		$this->PKV     = $this->_entity->$pk;
+		$pk = $this->PK;
+		$this->PKV = $this->_entity->$pk;
 
 		return $this;
 	}
 
-	public function getDBName() {
-		if ( ! $this->DBName ) {
+	public function getDBName()
+	{
+		if (!$this->DBName) {
 			$this->DBName = $this->PDO->getDbName();
 		}
 
 		return $this->DBName;
 	}
 
-	public function setDBName( $dbName ) {
+	public function setDBName($dbName)
+	{
 		$this->DBName = $dbName;
-		$this->PDO->setDbName( $dbName );
+		$this->PDO->setDbName($dbName);
 
 		return $this;
 	}
@@ -342,7 +391,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return array|null
 	 */
-	public function getTables() {
+	public function getTables()
+	{
 		return $this->PDO->getAllTables();
 	}
 
@@ -351,7 +401,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return array|bool
 	 */
-	public function getDBs() {
+	public function getDBs()
+	{
 		return $this->PDO->getDBs();
 	}
 
@@ -363,11 +414,12 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return bool
 	 */
-	public function setField( $field, $value = null ) {
-		if ( is_string( $field ) ) {
-			$this->FieldData[ $field ] = $value;
-		} else if ( is_array( $field ) ) {
-			$this->FieldData = array_merge( $this->FieldData, $field );
+	public function setField($field, $value = null)
+	{
+		if (is_string($field)) {
+			$this->FieldData[$field] = $value;
+		} else if (is_array($field)) {
+			$this->FieldData = array_merge($this->FieldData, $field);
 		} else {
 			return false;
 		}
@@ -380,7 +432,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @param string $PKV
 	 */
-	public function setPKV( $PKV ) {
+	public function setPKV($PKV)
+	{
 		$this->PKV = $PKV;
 	}
 
@@ -389,7 +442,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return string
 	 */
-	public function getPKV() {
+	public function getPKV()
+	{
 		return $this->PKV;
 	}
 
@@ -398,7 +452,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return string
 	 */
-	public function getPK() {
+	public function getPK()
+	{
 		return $this->PK;
 	}
 
@@ -410,14 +465,16 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function limit( $start, $pageSize = false ) {
-		$this->PDO->limit( $start, $pageSize );
+	public function limit($start, $pageSize = false)
+	{
+		$this->PDO->limit($start, $pageSize);
 
 		return $this;
 	}
 
-	public function sleep($time=0){
-		$this->PDO->sleep( $time );
+	public function sleep($time = 0)
+	{
+		$this->PDO->sleep($time);
 		return $this->PDO;
 	}
 
@@ -426,24 +483,30 @@ class BaseM extends IModelInterface {
 	 *
 	 *
 	 * @param array $data
-	 * @param bool  $is_move_pk  是否强制删除主键值,对于自增id主键时，可以为true
-	 * @param bool  $filter_null 是否过滤null 值的字段,true时为过滤
+	 * @param bool $is_move_pk 是否强制删除主键值,对于自增id主键时，可以为true
+	 * @param bool $filter_null 是否过滤null 值的字段,true时为过滤
 	 *
 	 *
 	 * @return bool|mixed
 	 * @throws \Exception\DBException
 	 */
-	public function add( $data = array(), $is_move_pk = false, $filter_null = false ) {
-		$this->setFieldData( $data );
-		if ( $is_move_pk ) {
-			unset( $this->FieldData[ $this->PK ] );
+	public function add($data = array(), $is_move_pk = false, $filter_null = false)
+	{
+		$this->setFieldData($data);
+		if ($is_move_pk) {
+			unset($this->FieldData[$this->PK]);
 		}
 		$this->VerifyRule();
-		$id=$this->PDO->add( $this->FieldData, $filter_null );
-		if($id===false){
+
+		$id = $this->PDO->add($this->FieldData, $filter_null);
+
+
+		if ($id === false) {
 			ThrowException::SystemException(ErrorHandler::DB_INSERT_FAIL);
-		}else {
-			$this->addAfter( $id );
+		} else {
+			$this->FieldData[$this->PK] = $id;
+			$this->_entity->setData($this->FieldData);
+			$this->addAfter($id);
 		}
 
 		return $id;
@@ -454,7 +517,17 @@ class BaseM extends IModelInterface {
 	 *
 	 * @param $insert_id
 	 */
-	public function addAfter( $insert_id ) {
+	public function addAfter()
+	{
+		foreach ($this->subObject->getObserver() as $observer) {
+
+			if ($observer instanceof MysqlObserverInterface) {
+
+				$observer->insert($this->_entity);
+			} else {
+				print_r('not instance of MysqlObserverInterface');
+			}
+		}
 
 	}
 
@@ -463,7 +536,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return string
 	 */
-	public function getErrorMessage() {
+	public function getErrorMessage()
+	{
 		return $this->Error_Message;
 	}
 
@@ -472,19 +546,20 @@ class BaseM extends IModelInterface {
 	 *
 	 * @param array $data
 	 */
-	public function setFieldData( $data = array() ) {
+	public function setFieldData($data = array())
+	{
 
-		if ( is_array( $data ) ) {
+		if (is_array($data)) {
 			$this->FieldData = $data;
 		}
-		if ( isset( $this->FieldData[ $this->PK ] ) && $this->FieldData[ $this->PK ] ) {
-			$this->setPKV( $this->FieldData[ $this->PK ] );
+		if (isset($this->FieldData[$this->PK]) && $this->FieldData[$this->PK]) {
+			$this->setPKV($this->FieldData[$this->PK]);
 		} else {
-			$this->FieldData = array_merge( $this->_DefaultFieldValue, $this->FieldData );
+			$this->FieldData = array_merge($this->_DefaultFieldValue, $this->FieldData);
 		}
-		foreach ( $this->FieldData as $key => $val ) {
-			if ( ! isset( $this->fieldArr[ $key ] ) ) {
-				unset( $this->FieldData[ $key ] );
+		foreach ($this->FieldData as $key => $val) {
+			if (!isset($this->fieldArr[$key])) {
+				unset($this->FieldData[$key]);
 			}
 		}
 	}
@@ -499,12 +574,13 @@ class BaseM extends IModelInterface {
 	 * @return $this
 	 * @throws DBException
 	 */
-	public function field( $field, $remove = false ) {
+	public function field($field, $remove = false)
+	{
 
-		if ( empty( $this->PDO ) ) {
-			throw new DBException( ErrorHandler::DB_PDO_EMPTY );
+		if (empty($this->PDO)) {
+			throw new DBException(ErrorHandler::DB_PDO_EMPTY);
 		}
-		$this->PDO->field( $field, $remove );
+		$this->PDO->field($field, $remove);
 
 		return $this;
 	}
@@ -514,8 +590,9 @@ class BaseM extends IModelInterface {
 	 *
 	 * @param $action
 	 */
-	public function setAction( $action ) {
-		if ( $action ) {
+	public function setAction($action)
+	{
+		if ($action) {
 			$this->action = $action;
 		}
 	}
@@ -525,7 +602,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return array
 	 */
-	public function getFieldData() {
+	public function getFieldData()
+	{
 		return $this->FieldData;
 	}
 
@@ -536,7 +614,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function relevance( $value = true ) {
+	public function relevance($value = true)
+	{
 		$this->_relevance = $value;
 
 		return $this;
@@ -550,9 +629,10 @@ class BaseM extends IModelInterface {
 	 * @return bool
 	 * @throws \PTLibrary\Exception\DBException
 	 */
-	public function addAll( $data = array() ) {
-		foreach ( $data as $_data ) {
-			$this->PDO->add( $_data );
+	public function addAll($data = array())
+	{
+		foreach ($data as $_data) {
+			$this->PDO->add($_data);
 		}
 
 		return true;
@@ -565,8 +645,9 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return mixed
 	 */
-	public function getByPK( $pk_value ) {
-		$info      = $this->PDO->where( array( $this->PK => $pk_value ) )->find();
+	public function getByPK($pk_value)
+	{
+		$info = $this->PDO->where(array($this->PK => $pk_value))->find();
 		$this->PKV = $pk_value;
 
 		return $info;
@@ -585,6 +666,7 @@ class BaseM extends IModelInterface {
 	 * != 相当 <>
 	 * in
 	 * like  array('like'=>'%'.value.'%')
+	 * regexp  array('like'=>'正则表达式')
 	 *
 	 * expression
 	 * between
@@ -593,16 +675,19 @@ class BaseM extends IModelInterface {
 	 * 如何：where['id']=array('in'=>'1,2');
 	 * where['id']=array('in'=>array(1,2,3));
 	 * where['id']=array('between'=>array(1,29))
+	 * where['id']=array('regexp'=>'正则表达式'))
 	 * </pre>
 	 *
 	 * @param $where
 	 *
 	 * @return $this
 	 */
-	public function where( $where ) {
-		if ( $where ) {
-			$this->PDO->where( $where );
+	public function where($where)
+	{
+		if ($where) {
+			$this->PDO->where($where);
 		}
+		// print_r($where);
 
 		return $this;
 	}
@@ -615,9 +700,10 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return bool|mixed
 	 */
-	public function findByAttribute( $Attribute, $value ) {
+	public function findByAttribute($Attribute, $value)
+	{
 
-		return $this->where( array( $Attribute => $value ) )->find();
+		return $this->where(array($Attribute => $value))->find();
 	}
 
 	/**
@@ -629,8 +715,9 @@ class BaseM extends IModelInterface {
 	 * @return mixed
 	 * @throws \PTLibrary\DB\DBException
 	 */
-	public function findAllByAttribute( $Attribute, $value ) {
-		return $this->where( array( $Attribute => $value ) )->select();
+	public function findAllByAttribute($Attribute, $value)
+	{
+		return $this->where(array($Attribute => $value))->select();
 	}
 
 	/**
@@ -640,7 +727,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function setPageSize( $size = 20 ) {
+	public function setPageSize($size = 20)
+	{
 		$this->_pageSize = $size;
 
 		return $this;
@@ -651,8 +739,9 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function setResIndexField( $field ) {
-		$this->PDO->setResIndexField( $field );
+	public function setResIndexField($field)
+	{
+		$this->PDO->setResIndexField($field);
 
 		return $this;
 	}
@@ -664,9 +753,25 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function order( $order ) {
-		$this->PDO->order( $order );
+	public function order($order)
+	{
+		$this->PDO->order($order);
 
+		return $this;
+	}
+
+	/**
+	 * 自定义排序
+	 *
+	 * 参数 array('id','1','2','3')
+	 *
+	 *
+	 * @param $order_by_field
+	 * @return $this
+	 */
+	public function orderByField($order_by_field)
+	{
+		$this->PDO->order_by_field($order_by_field);
 		return $this;
 	}
 
@@ -677,8 +782,9 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function group( $group ) {
-		$this->PDO->group( $group );
+	public function group($group)
+	{
+		$this->PDO->group($group);
 
 		return $this;
 	}
@@ -690,7 +796,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function setPageEnable( $value = true ) {
+	public function setPageEnable($value = true)
+	{
 		$this->pageEnable = $value;
 
 		return $this;
@@ -703,7 +810,8 @@ class BaseM extends IModelInterface {
 	 * @return bool|int|null
 	 * @throws \Exception
 	 */
-	public function count() {
+	public function count()
+	{
 		$this->_recordCount = $this->PDO->count();
 
 		return $this->_recordCount;
@@ -712,7 +820,8 @@ class BaseM extends IModelInterface {
 	/**
 	 *清空查询的条件
 	 */
-	public function clearCondition() {
+	public function clearCondition()
+	{
 		$this->PDO->clearCondition();
 	}
 
@@ -720,14 +829,15 @@ class BaseM extends IModelInterface {
 	 * 链接方法
 	 *
 	 * @param string $table 关联表名
-	 * @param null   $as    表别名
-	 * @param null   $on    on条件
-	 * @param null   $filed 查询的关联表字段
+	 * @param null $as 表别名
+	 * @param null $on on条件
+	 * @param null $filed 查询的关联表字段
 	 *
 	 * @return $this\
 	 */
-	public function join( $table, $as = null, $on = null, $filed = null ) {
-		$this->PDO->join( $table, $as, $on, $filed );
+	public function join($table, $as = null, $on = null, $filed = null)
+	{
+		$this->PDO->join($table, $as, $on, $filed);
 
 		return $this;
 	}
@@ -738,8 +848,9 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function tableAs( $as ) {
-		$this->PDO->setTableAs( $as );
+	public function tableAs($as)
+	{
+		$this->PDO->setTableAs($as);
 
 		return $this;
 	}
@@ -751,7 +862,8 @@ class BaseM extends IModelInterface {
 	 * @return string
 	 * @throws \PTLibrary\DB\DBException
 	 */
-	public function getFullTableName() {
+	public function getFullTableName()
+	{
 		return $this->PDO->getFullTableName();
 	}
 
@@ -760,8 +872,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @param array $where
 	 *
-	 * @throws DBException
 	 * @return mixed
+	 * @throws DBException
 	 */
 	/**
 	 * @param array $where
@@ -769,25 +881,42 @@ class BaseM extends IModelInterface {
 	 * @return array
 	 * @throws \PTLibrary\DB\DBException
 	 */
-	public function select( $where = array() ) {
+	public function select($where = array())
+	{
 		try {
-			$this->where( $where );
-			if ( $this->pageEnable ) {
-				$res = $this->PDO->limit( ( $this->_currentPage - 1 ) * $this->getPageSize(), $this->getPageSize() )->select();
+			$this->where($where);
+			if ($this->pageEnable) {
+				$res = $this->PDO->limit(($this->_currentPage - 1) * $this->getPageSize(), $this->getPageSize())->select();
 			} else {
 				$res = $this->PDO->select();
 			}
 			//实体关联查询
-			if ( $this->_entity ) {
-				$this->_entity->doRelevance( $res );
+			if ($this->_entity) {
+				$this->_entity->doRelevance($res);
 			}
 
 			return $res;
-		} catch ( \Exception $e ) {
-			Log::error( $e->getMessage() . ';' . $this->PDO->getLastSql() );
-			throw new DBException( ErrorHandler::DB_SELECT_FAIL );
+		} catch (\Exception $e) {
+			Log::error($e->getMessage() . ';' . $this->PDO->getLastSql());
+			throw new DBException($e->getMessage() . ';' . $this->PDO->getLastSql(), ErrorHandler::DB_SELECT_FAIL);
 		}
 
+	}
+
+	/**
+	 * 设置字段类型
+	 *
+	 * 只对于查询生效，对插入无效
+	 * 如{"id":2,"name":"n1"},设置为 ["id"=>"int","name"=>"string"]
+	 *
+	 * @param string $field 表的字段名字
+	 * @param array $typeArray JOSN对象字段数组
+	 * @return $this
+	 */
+	public function setJsonFieldType(string $field, array $typeArray = [])
+	{
+		$this->PDO->setJsonFieldType($field, $typeArray);
+		return $this;
 	}
 
 	/**
@@ -797,8 +926,9 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function rand($isRand=true){
-		$this->PDO->rand( $isRand );
+	public function rand($isRand = true)
+	{
+		$this->PDO->rand($isRand);
 		return $this;
 	}
 
@@ -814,17 +944,19 @@ class BaseM extends IModelInterface {
 	 * @return mixed
 	 * @throws \PTLibrary\DB\DBException
 	 */
-	public function findPage( $size = null ,$notGetCount=true) {
+	public function findPage($size = null, $notGetCount = true)
+	{
 
-		$size || $size =Request::instance()->get( $this->_page_size_key );
+		$size || $size = Request::instance()->get($this->_page_size_key);
 		$size || $size = 20;
-		$this->_isGetTotalPage =$notGetCount;
+		$this->_isGetTotalPage = $notGetCount;
 		$this->pageEnable = true;
-		$this->setPageSize( $size );
+		$this->setPageSize($size);
 		$list['page'] = $this->getPageInfo();
-		$res          = $this->select();
+		$res = $this->select();
+
 		$list['data'] = $res;
-		unset( $res );
+		unset($res);
 
 		return $list;
 	}
@@ -835,7 +967,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return null
 	 */
-	public function showPage() {
+	public function showPage()
+	{
 		return $this->_pageInfo;
 	}
 
@@ -847,14 +980,15 @@ class BaseM extends IModelInterface {
 	 * @return false|mixed
 	 * @throws \PTLibrary\DB\DBException
 	 */
-	public function find( $where = null ) {
+	public function find($where = null)
+	{
 
-		$this->where( $where );
+		$this->where($where);
 
-		$this->limit( 1 );
+		$this->limit(1);
 		$info = $this->select();
-		if ( $info ) {
-			return current( $info );
+		if ($info) {
+			return current($info);
 		}
 
 		return false;
@@ -869,8 +1003,9 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this
 	 */
-	public function table( $table, $as = null ) {
-		$this->PDO->setTable( $table, $as );
+	public function table($table, $as = null)
+	{
+		$this->PDO->setTable($table, $as);
 
 		return $this;
 	}
@@ -882,17 +1017,18 @@ class BaseM extends IModelInterface {
 	 * @param $relevance
 	 * @param $dimension
 	 */
-	function manyToOne( $child_name, $relevance, $dimension ) {
-		if ( $child_name && $relevance && $relevance['table'] && $this->relevanceResource ) {
+	function manyToOne($child_name, $relevance, $dimension)
+	{
+		if ($child_name && $relevance && $relevance['table'] && $this->relevanceResource) {
 
-			$relevance_Obj = D( $relevance['table'] );
-			if ( $relevance_Obj ) {
-				if ( $dimension == 1 ) {
-					$this->relevanceResource[ $child_name ] = $this->doGetRelevance( $relevance_Obj, 'find', $relevance );;
-				} elseif ( $dimension == 2 ) {
-					foreach ( $this->relevanceResource as $key => $relevance_val ) {
-						$this->relevanceResource[ $key ][ $child_name ] = $this->doGetRelevance( $relevance_Obj, 'select', $relevance,
-							$key );
+			$relevance_Obj = D($relevance['table']);
+			if ($relevance_Obj) {
+				if ($dimension == 1) {
+					$this->relevanceResource[$child_name] = $this->doGetRelevance($relevance_Obj, 'find', $relevance);;
+				} elseif ($dimension == 2) {
+					foreach ($this->relevanceResource as $key => $relevance_val) {
+						$this->relevanceResource[$key][$child_name] = $this->doGetRelevance($relevance_Obj, 'select', $relevance,
+							$key);
 
 					}
 				}
@@ -1007,38 +1143,39 @@ class BaseM extends IModelInterface {
 	/**
 	 * 更新数据
 	 *
-	 * @param array  $data
+	 * @param array $data
 	 * @param string $where
 	 *
 	 * @return bool|mixed
 	 * @throws \PTLibrary\DB\DBException
 	 */
-	public function save( $data = array(), $where = '' ) {
+	public function save($data = array(), $where = '')
+	{
 
-			$this->setFieldData( $data );
-			if ( $this->PKV ) {
-				empty( $where ) && $where = array( $this->getPK() => $this->PKV );
-				if ( $where && $this->FieldData ) {
-					$this->VerifyRule();
-					$res = $this->PDO->where( $where )->save( $this->FieldData );
-					if ( $res !== false ) {
-						$this->_entity->getContainer()->notify();
-						$this->updateAfter( $this->FieldData );
-					}
-
-					return $res;
-				}
-			} else {
-
-				$insert_id = $this->add( $this->FieldData );
-				if ( $insert_id !== false ) {
-					$this->addAfter( $insert_id );
+		$this->setFieldData($data);
+		if ($this->PKV) {
+			empty($where) && $where = array($this->getPK() => $this->PKV);
+			if ($where && $this->FieldData) {
+				$this->VerifyRule();
+				$res = $this->PDO->where($where)->save($this->FieldData);
+				if ($res !== false) {
+					$this->_entity->getContainer()->notify();
+					$this->updateAfter($this->FieldData);
 				}
 
-				return $insert_id;
+				return $res;
+			}
+		} else {
+
+			$insert_id = $this->add($this->FieldData);
+			if ($insert_id !== false) {
+				$this->addAfter($insert_id);
 			}
 
-			return false;
+			return $insert_id;
+		}
+
+		return false;
 
 
 	}
@@ -1046,17 +1183,23 @@ class BaseM extends IModelInterface {
 	/**
 	 * 删除后操作
 	 *
-	 * @param  bool|int $result 删除结果
-	 * @param null      $where  删除的条件
+	 * @param bool|int $result 删除结果
+	 * @param null $where 删除的条件
 	 */
-	public function deleteAfter( $result, $where = null ) {
-
+	public function deleteAfter($result, $where = null)
+	{
+		foreach ($this->subObject->getObserver() as $observer) {
+			if ($observer instanceof MysqlObserverInterface) {
+				$observer->del($this->_entity);
+			}
+		}
 	}
 
 	/**
 	 *  清空数据
 	 */
-	public function clearFieldData() {
+	public function clearFieldData()
+	{
 		$this->FieldData = array();
 	}
 
@@ -1067,19 +1210,32 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return bool
 	 */
-	public function delete( $where = null ) {
-		if ( $where ) {
-			$result = $this->PDO->where( $where )->delete();
+	public function delete($where = null)
+	{
+		if ($where) {
+			$result = $this->PDO->where($where)->delete();
 		} else {
 			$result = $this->PDO->delete();
 		}
-		if(!$result){
+		if ($result === false || $result == 0) {
 			ThrowException::SystemException(ErrorHandler::DB_DELETE_FAIL);
 		}
-		$this->deleteAfter( $result, $where );
+		$this->deleteAfter($result, $where);
 		return $result;
 	}
 
+	/**
+	 * 求和
+	 * @param string $field 要求和的字段名称
+	 * @param string $as 别名
+	 *
+	 * @return array
+	 */
+	public function sum(string $field,string $as=''){
+		if(!$field)ThrowException::DBException(32223,'求和字段无效');
+		$res=$this->PDO->sum($field,$as);
+		return $res[0];
+	}
 	/**
 	 *  通过主删除数据
 	 *
@@ -1089,9 +1245,10 @@ class BaseM extends IModelInterface {
 	 * @return bool|int
 	 * @throws \Exception\DBException
 	 */
-	public function deleteByPK( $pk_value ) {
-		if ( $pk_value ) {
-			return $this->PDO->where( array( $this->PK => $pk_value ) )->delete();
+	public function deleteByPK($pk_value)
+	{
+		if ($pk_value) {
+			return $this->PDO->where(array($this->PK => $pk_value))->delete();
 		}
 
 		return false;
@@ -1107,10 +1264,11 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return mixed
 	 */
-	public function setInc( $field, $step = 1 ) {
-		$res=$this->PDO->setInc( $field, $step );
-		if($res===false){
-		    ThrowException::SystemException(ErrorHandler::DB_SET_INC_FAIL);
+	public function setInc($field, $step = 1)
+	{
+		$res = $this->PDO->setInc($field, $step);
+		if ($res === false) {
+			ThrowException::SystemException(ErrorHandler::DB_SET_INC_FAIL);
 		}
 		return $res;
 	}
@@ -1127,16 +1285,17 @@ class BaseM extends IModelInterface {
 	 *
 	 * </pre>
 	 *
-	 * @param  string|array $field 字段
-	 * @param int|float     $step  自增数值
+	 * @param string|array $field 字段
+	 * @param int|float $step 自增数值
 	 *
 	 * @return bool|mixed|string
 	 * @throws \Exception\DBException
 	 */
-	public function setAutoInc( $field, $step = 1 ) {
-		$res = $this->PDO->setAutoInc( $field, $step );
-		if ( $res !== false ) {
-			$this->_entity->getContainer()->notify();
+	public function setAutoInc($field, $step = 1)
+	{
+		$res = $this->PDO->setAutoInc($field, $step);
+		if ($res !== false) {
+			//$this->_entity->getContainer()->notify();
 		}
 
 		return $res;
@@ -1153,8 +1312,9 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return mixed
 	 */
-	public function setRnc( $field, $step = 1 ) {
-		return $this->PDO->setRnc( $field, $step );
+	public function setRnc($field, $step = 1)
+	{
+		return $this->PDO->setRnc($field, $step);
 	}
 
 	/**
@@ -1163,11 +1323,12 @@ class BaseM extends IModelInterface {
 	 *
 	 * @throws \Exception\FieldVerifyException
 	 */
-	public function FieldError( $field, $msg = null ) {
-		if ( $field ) {
-			$description = Tool::getArrVal( $field, $this->_FieldDescription, $field );
+	public function FieldError($field, $msg = null)
+	{
+		if ($field) {
+			$description = Tool::getArrVal($field, $this->_FieldDescription, $field);
 			$description .= ':' . $msg;
-			FieldVerifyException::throwException( $description );
+			FieldVerifyException::throwException($description);
 			//throw new \Exception($description, SystemError::PARAM_EXIT);
 		}
 	}
@@ -1197,73 +1358,74 @@ class BaseM extends IModelInterface {
 	 *
 	 *
 	 */
-	public function VerifyRule() {
-		if ( $this->DoVerifyRule && $this->_Rule ) {
-			foreach ( $this->_Rule as $value ) {
-				foreach ( $value[1] as $field ) {
-					if ( $field ) {
+	public function VerifyRule()
+	{
+		if ($this->DoVerifyRule && $this->_Rule) {
+			foreach ($this->_Rule as $value) {
+				foreach ($value[1] as $field) {
+					if ($field) {
 
-						switch ( strtolower( $value[0] ) ) {
+						switch (strtolower($value[0])) {
 							case 'required':
 								$description = '是必填项';
-								if ( empty( $this->FieldData[ $field ] ) ) {
-									$this->FieldError( $field, $description );
+								if (empty($this->FieldData[$field])) {
+									$this->FieldError($field, $description);
 								}
 								break;
 							case 'email':
 								$pattern = "/^([0-9A-Za-z\\-_\\.]+)@([0-9a-z]+\\.[a-z]{2,3}(\\.[a-z]{2})?)$/i";
-								if ( ! preg_match( $pattern, $this->FieldData[ $field ] ) ) {
-									$this->FieldError( $field, '格式错误' );
+								if (!preg_match($pattern, $this->FieldData[$field])) {
+									$this->FieldError($field, '格式错误');
 								}
 								break;
 							case 'mobile':
 								$pattern = "/1\d{10}/i";
-								if ( ! preg_match( $pattern, $this->FieldData[ $field ] ) ) {
-									$this->FieldError( $field, '格式错误' );
+								if (!preg_match($pattern, $this->FieldData[$field])) {
+									$this->FieldError($field, '格式错误');
 								}
 								break;
 							case 'maxlength':
-								$maxValue = (int) ( $value[2] );
-								if ( strlen( $this->FieldData[ $field ] ) > $maxValue ) {
-									$this->FieldError( $field, '长度超过' . $maxValue );
+								$maxValue = (int)($value[2]);
+								if (strlen($this->FieldData[$field]) > $maxValue) {
+									$this->FieldError($field, '长度超过' . $maxValue);
 								}
 								break;
 							case 'minlength':
-								$minValue = (int) ( $value[2] );
-								if ( strlen( $this->FieldData[ $field ] ) < $minValue ) {
-									$this->FieldError( $field, '长度小于' . $minValue );
+								$minValue = (int)($value[2]);
+								if (strlen($this->FieldData[$field]) < $minValue) {
+									$this->FieldError($field, '长度小于' . $minValue);
 								}
 								break;
 							case 'length':
-								$length = (int) ( $value[2] );
-								if ( strlen( $this->FieldData[ $field ] ) != $length ) {
-									$this->FieldError( $field, '长度必须等于' . $length );
+								$length = (int)($value[2]);
+								if (strlen($this->FieldData[$field]) != $length) {
+									$this->FieldError($field, '长度必须等于' . $length);
 								}
 								break;
 							case 'max':
-								$length = (int) ( $value[2] );
-								if ( strlen( $this->FieldData[ $field ] ) > $length ) {
-									$this->FieldError( $field, '值不能大于' . $length );
+								$length = (int)($value[2]);
+								if (strlen($this->FieldData[$field]) > $length) {
+									$this->FieldError($field, '值不能大于' . $length);
 								}
 								break;
 							case 'min':
-								$length = (int) ( $value[2] );
-								if ( strlen( $this->FieldData[ $field ] ) < $length ) {
-									$this->FieldError( $field, '值不能小于' . $length );
+								$length = (int)($value[2]);
+								if (strlen($this->FieldData[$field]) < $length) {
+									$this->FieldError($field, '值不能小于' . $length);
 								}
 								break;
 							case 'number':
 								$pattern = "/\d{1,}/i";
-								if ( ! preg_match( $pattern, $this->FieldData[ $field ] ) ) {
-									$this->FieldError( $field, '必须是数字组成' );
+								if (!preg_match($pattern, $this->FieldData[$field])) {
+									$this->FieldError($field, '必须是数字组成');
 								}
 								break;
 							case 'unique':
-								$val = Tool::getArrVal( $field, $this->FieldData );
-								if ( $val ) {
-									$rs = $this->PDO->where( array( $field => $val ) )->find();
-									if ( $rs ) {
-										$this->FieldError( $field, '已经存在' );
+								$val = Tool::getArrVal($field, $this->FieldData);
+								if ($val) {
+									$rs = $this->PDO->where(array($field => $val))->find();
+									if ($rs) {
+										$this->FieldError($field, '已经存在');
 									}
 								}
 
@@ -1280,14 +1442,16 @@ class BaseM extends IModelInterface {
 	/**
 	 * 开启事务
 	 */
-	public function beginTransaction() {
+	public function beginTransaction()
+	{
 		$this->PDO->beginTransaction();
 	}
 
 	/**
 	 * @return bool
 	 */
-	public function commit() {
+	public function commit()
+	{
 		$res = $this->PDO->commit();
 
 		return $res;
@@ -1296,7 +1460,8 @@ class BaseM extends IModelInterface {
 	/**
 	 * 事务回滚
 	 */
-	public function rollback() {
+	public function rollback()
+	{
 		$this->PDO->rollback();
 	}
 
@@ -1305,8 +1470,9 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return \PDOStatement
 	 */
-	public function query( $sql ) {
-		return $this->PDO->query( $sql );
+	public function query($sql)
+	{
+		return $this->PDO->query($sql);
 	}
 
 	/**
@@ -1317,20 +1483,21 @@ class BaseM extends IModelInterface {
 	 * @return \PDOStatement
 	 * @throws \Exception\DBException
 	 */
-	public function addField( DbFiledParam $filedParam ) {
+	public function addField(DbFiledParam $filedParam)
+	{
 		$filedParam->chkParam();
-		if(isset($this->fieldArr[$filedParam->field])){
-			ThrowException::DBException( 300210, '字段已存在' );
+		if (isset($this->fieldArr[$filedParam->field])) {
+			ThrowException::DBException(300210, '字段已存在');
 		}
 		//重新检测表是否存在
-		$this->PDO->table_exists($this->_table,true);
-		$type = $this->getFiledTypeStr( $filedParam );
+		$this->PDO->table_exists($this->_table, true);
+		$type = $this->getFiledTypeStr($filedParam);
 
 		$fullTable = $this->fullTableName;
-		$this->quotes( $fullTable );
-		$sql     = "alter table {$fullTable} add `{$filedParam->field}` {$type};";
+		$this->quotes($fullTable);
+		$sql = "alter table {$fullTable} add `{$filedParam->field}` {$type};";
 		//Log::log($sql);
-		return  $this->query( $sql );
+		return $this->query($sql);
 	}
 
 	/**
@@ -1339,21 +1506,23 @@ class BaseM extends IModelInterface {
 	 * @return string
 	 * @throws \Exception\DBException
 	 */
-	private function getFiledTypeStr( DbFiledParam $filedParam ) {
+	private function getFiledTypeStr(DbFiledParam $filedParam)
+	{
 		$filedParam->chkParam();
-		$type    = $this->getFiledType( $filedParam );
-		$isNull  = $this->getIsNull( $filedParam );
-		$default = $this->getIsDefault( $filedParam );
-		$comment = addslashes( $filedParam->comment );
-		if( $filedParam->type == DbFiledParam::type_text ){
-            $str = "{$type} COMMENT '{$comment}'";
-        }else{
-		    $str = "{$type} {$isNull} $default COMMENT '{$comment}'";
-        }
+		$type = $this->getFiledType($filedParam);
+		$isNull = $this->getIsNull($filedParam);
+		$default = $this->getIsDefault($filedParam);
+		$comment = addslashes($filedParam->comment);
+		if ($filedParam->type == DbFiledParam::type_text) {
+			$str = "{$type} COMMENT '{$comment}'";
+		} else {
+			$str = "{$type} {$isNull} $default COMMENT '{$comment}'";
+		}
 		return $str;
 	}
 
-	public function getIsNull( DbFiledParam $filedParam ) {
+	public function getIsNull(DbFiledParam $filedParam)
+	{
 		return $filedParam->is_null ? '' : 'not null';
 	}
 
@@ -1363,12 +1532,13 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return string
 	 */
-	public function getIsDefault( DbFiledParam $filedParam ) {
+	public function getIsDefault(DbFiledParam $filedParam)
+	{
 
-		if ( in_array( $filedParam->type, [ DbFiledParam::type_float, DbFiledParam::type_double, DbFiledParam::type_decimal,DbFiledParam::type_int ] ) ) {
-			return 'DEFAULT ' . ( is_null( $filedParam->default ) ? 'null' : $filedParam->default );
+		if (in_array($filedParam->type, [DbFiledParam::type_float, DbFiledParam::type_double, DbFiledParam::type_decimal, DbFiledParam::type_int])) {
+			return 'DEFAULT ' . (is_null($filedParam->default) ? 'null' : $filedParam->default);
 		} else {
-			return 'DEFAULT ' . ( is_null( $filedParam->default ) ? 'null' : '\'' . addslashes($filedParam->default ). '\'' );
+			return 'DEFAULT ' . (is_null($filedParam->default) ? 'null' : '\'' . addslashes($filedParam->default) . '\'');
 		}
 	}
 
@@ -1380,19 +1550,20 @@ class BaseM extends IModelInterface {
 	 * @return \PDOStatement
 	 * @throws \Exception\DBException
 	 */
-	public function changeField(DbFiledParam $filedParam){
+	public function changeField(DbFiledParam $filedParam)
+	{
 		$field = $filedParam->field;
-		if(!$field){
-			ThrowException::DBException( 300221, '字段名无效' );
+		if (!$field) {
+			ThrowException::DBException(300221, '字段名无效');
 		}
-		$str = $this->getFiledTypeStr( $filedParam );
-		$field = addslashes( $field );
-		$newField = addslashes( $filedParam->new_field);
-		$fullTable=$this->fullTableName;
-		$this->quotes( $fullTable );
-	    $sql="ALTER TABLE {$fullTable} CHANGE `{$field}` `{$newField}` {$str}";
-		$changeRes = $this->query( $sql);
-		if($changeRes){
+		$str = $this->getFiledTypeStr($filedParam);
+		$field = addslashes($field);
+		$newField = addslashes($filedParam->new_field);
+		$fullTable = $this->fullTableName;
+		$this->quotes($fullTable);
+		$sql = "ALTER TABLE {$fullTable} CHANGE `{$field}` `{$newField}` {$str}";
+		$changeRes = $this->query($sql);
+		if ($changeRes) {
 			$this->PDO->getFields(true);
 		}
 		return $changeRes;
@@ -1402,9 +1573,10 @@ class BaseM extends IModelInterface {
 	 * 对字符串加反单引号
 	 * @param $str
 	 */
-	public function quotes(&$str) {
-		if($str){
-			$str='`'.str_replace('.','`.`',$str).'`';
+	public function quotes(&$str)
+	{
+		if ($str) {
+			$str = '`' . str_replace('.', '`.`', $str) . '`';
 		}
 	}
 
@@ -1415,15 +1587,16 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return string
 	 */
-	public function getFiledType( DbFiledParam $filedParam ) {
-		$type = addslashes( $filedParam->type );
-		$len = (int)$filedParam->length ;
-		$point = ( $filedParam->point );
-		if ( in_array( $filedParam->type, [ DbFiledParam::type_float, DbFiledParam::type_double, DbFiledParam::type_decimal ] ) ) {
+	public function getFiledType(DbFiledParam $filedParam)
+	{
+		$type = addslashes($filedParam->type);
+		$len = (int)$filedParam->length;
+		$point = ($filedParam->point);
+		if (in_array($filedParam->type, [DbFiledParam::type_float, DbFiledParam::type_double, DbFiledParam::type_decimal])) {
 			return "{$type}({$len},{$point})";
-		} else if($filedParam->type == DbFiledParam::type_text){
+		} else if ($filedParam->type == DbFiledParam::type_text) {
 			return DbFiledParam::type_text;
-		}else{
+		} else {
 			return "{$type}({$len})";
 		}
 
@@ -1437,17 +1610,18 @@ class BaseM extends IModelInterface {
 	 * @return bool|\PDOStatement
 	 * @throws \Exception\DBException
 	 */
-	public function delField( string  $filed ) {
-		if(!$filed){
-		    return false;
+	public function delField(string $filed)
+	{
+		if (!$filed) {
+			return false;
 		}
-		$filed = addslashes( $filed );
-		if(!isset($this->fieldArr[$filed])){
-			ThrowException::DBException( 300211, '字段不存在' );
+		$filed = addslashes($filed);
+		if (!isset($this->fieldArr[$filed])) {
+			ThrowException::DBException(300211, '字段不存在');
 		}
-		$sql     = "alter table {$this->_table} drop $filed";
-		if ( $res=$this->query( $sql ) ) {
-			unset( $this->fieldArr[ $filed ] );
+		$sql = "alter table {$this->_table} drop $filed";
+		if ($res = $this->query($sql)) {
+			unset($this->fieldArr[$filed]);
 
 			return $res;
 		}
@@ -1461,9 +1635,10 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return $this;
 	 */
-	public function setTablePrefix( $prefix ) {
+	public function setTablePrefix($prefix)
+	{
 		$this->_tablePrefix = $prefix;
-		$this->PDO->setTablePrefix( $prefix );
+		$this->PDO->setTablePrefix($prefix);
 
 		return $this;
 	}
@@ -1477,42 +1652,143 @@ class BaseM extends IModelInterface {
 	 *  ['a'=>['expression'=>'a+3']]
 	 *
 	 * @VERSION 2.1
-	 * @author  pantian
-	 *
 	 * @param      $data
 	 * @param bool $isWhere true 必须限制条件 false 限制条件可有可无 注意 会修改全表
 	 *
 	 * @return bool|int
 	 * @throws DBException
+	 * @author  pantian
+	 *
 	 */
-	public function update( $data, $isWhere = true ) {
-		if ( $isWhere && ! $this->PDO->getWhere() ) {
+	public function update($data, $isWhere = true)
+	{
+		if ($isWhere && !$this->PDO->getWhere()) {
 			return false;
 		}
-		$res = $this->PDO->save( $data );
-		if ( $res === false ) {
+		//print_r('测试跟踪 update');
+		$res = $this->PDO->save($data);
+		if ($res === false) {
 			ThrowException::SystemException(ErrorHandler::SAVE_FAIL);
-		}else{
-			$this->_entity->getContainer()->notify();
 		}
-		$this->updateAfter( $data );
+
+
+		$this->updateAfter($data);
 		return $res;
+	}
+
+	/**
+	 * 删除JSON数据
+	 *
+	 * $data 格式 ['params'=>['fieldName1','fieldName2']]
+	 * @param array $data
+	 */
+	public function jsonRemove(array $data)
+	{
+		$tmp = [];
+		foreach ($data as $field => $value) {
+			$tmp[$field] = ['json_remove' => $value];
+		}
+
+		return $this->update($tmp);
+	}
+
+	/**
+	 * 更新JOSN数据
+	 *
+	 * $data 格式 ['params'=>['.fieldName1'=>'new_value1','fieldName2'=>'new_value2']]
+	 *
+	 * @param array $data
+	 *
+	 * @return bool|int
+	 * @throws \PTLibrary\DB\DBException
+	 */
+	public function jsonUpdate(array $data)
+	{
+		$tmp = [];
+		foreach ($data as $field => $value) {
+			$tmp[$field] = ['json' => $value];
+		}
+		//print_r($tmp);
+		return $this->update($tmp);
+	}
+
+	/**
+	 * JOSN插入数据，如果已存在，则会忽略掉已存在的字段
+	 * $data 格式 ['params'=>['.fieldName1'=>'new_value1','fieldName2'=>'new_value2']]
+	 * @param $data
+	 *
+	 * @return bool|int
+	 * @throws \PTLibrary\DB\DBException
+	 */
+	public function jsonInstart($data)
+	{
+		$tmp = [];
+		foreach ($data as $field => $value) {
+			$tmp[$field] = ['json_instert' => $value];
+		}
+
+		return $this->update($tmp);
+	}
+
+	/**
+	 * 在数组指定位置追加数组元素
+	 * @param string $field 字段
+	 * @param array $data 数组
+	 * @param string $index 数组方位  默认尾部
+	 *
+	 * @return bool|int
+	 * @throws \PTLibrary\DB\DBException
+	 */
+	public function jsonArrayAppendObject(string $field, array $data, $index = '')
+	{
+
+		return $this->update([$field => ['json_array_append_object' => [$index => $data]]]);
+	}
+
+	/**
+	 * 在数组指定位置插入数组元素
+	 * @param array $data
+	 *
+	 * @return bool|int
+	 * @throws \PTLibrary\DB\DBException
+	 */
+	public function jsonArrayInstart(array $data)
+	{
+		$tmp = [];
+		foreach ($data as $field => $value) {
+			$tmp[$field] = ['json_array_insert' => $value];
+		}
+
+		return $this->update($tmp);
 	}
 
 	/**
 	 * 更新后操作
 	 *
-	 * @param $data
 	 */
-	public function updateAfter( $data ) {
+	public function updateAfter($data)
+	{
 
+		$obs = $this->subObject->getObserver();
+		if (!empty($obs)) {
+			$this->_entity->resetData($data);
+			$this->_entity->setData($data);
+			foreach ($this->subObject->getObserver() as $observer) {
+				if ($observer instanceof MysqlObserverInterface) {
+					$observer->update($this->_entity);
+				}
+			}
+			unset($data);
+		}
 	}
 
-	public function getLastSql() {
+	public function getLastSql()
+	{
 		return $this->PDO->getLastSql();
 	}
 
-	public function getAllSql() {
+	public function getAllSql()
+	{
 		return $this->PDO->getAllSql();
 	}
 
@@ -1521,7 +1797,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return array
 	 */
-	public function getAllSqlHistory() {
+	public function getAllSqlHistory()
+	{
 		return $this->PDO->getSqlHistory();
 	}
 
@@ -1530,7 +1807,8 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return array
 	 */
-	public function getLastExecuteData() {
+	public function getLastExecuteData()
+	{
 		return $this->PDO->getLastExecuteData();
 	}
 
@@ -1542,19 +1820,20 @@ class BaseM extends IModelInterface {
 	 * @return bool
 	 * @throws \Exception\DBException
 	 */
-	public function createIndex(DbIndexParam $dbIndexParam){
-		$db=$this->getDBName();
-		$table=$this->getTableName();
+	public function createIndex(DbIndexParam $dbIndexParam)
+	{
+		$db = $this->getDBName();
+		$table = $this->getTableName();
 		$dbIndexParam->chkParam();
-		if($dbIndexParam->type==DbIndexParam::TYPE_PRIMARY_KEY){
+		if ($dbIndexParam->type == DbIndexParam::TYPE_PRIMARY_KEY) {
 			$dbIndexParam->indexName = '';
 		}
-		$param = ['table'=>$table,'type'=>$dbIndexParam->type,'filed'=>$dbIndexParam->filed,'indexName'=>$dbIndexParam->indexName];
-		$sql="ALTER TABLE `{$db}`.`{$table}` ADD {$dbIndexParam->type} {$dbIndexParam->indexName} ({$dbIndexParam->filed}) comment '{$dbIndexParam->comment}'";
+		$param = ['table' => $table, 'type' => $dbIndexParam->type, 'filed' => $dbIndexParam->filed, 'indexName' => $dbIndexParam->indexName];
+		$sql = "ALTER TABLE `{$db}`.`{$table}` ADD {$dbIndexParam->type} {$dbIndexParam->indexName} ({$dbIndexParam->filed}) comment '{$dbIndexParam->comment}'";
 		//$sql="ALTER TABLE :table ADD :type :indexName (:filed)";
 		//echo $sql,PHP_EOL;
-		$this->PDO->prepare( $sql );
-		return $this->PDO->execute( [] );
+		$this->PDO->prepare($sql);
+		return $this->PDO->execute([]);
 		//return $this->query( $sql );
 	}
 
@@ -1566,13 +1845,14 @@ class BaseM extends IModelInterface {
 	 * @return bool|\PDOStatement
 	 * @return bool
 	 */
-	public function delIndex($indexName){
-		if(!$indexName)return false;
-		$db=$this->getDBName();
-		$table=$this->_table;
-		$sql="ALTER TABLE `{$db}`.`{$table}` DROP INDEX {$indexName}";
-		$this->PDO->prepare( $sql );
-		return $this->PDO->execute( [] );
+	public function delIndex($indexName)
+	{
+		if (!$indexName) return false;
+		$db = $this->getDBName();
+		$table = $this->_table;
+		$sql = "ALTER TABLE `{$db}`.`{$table}` DROP INDEX {$indexName}";
+		$this->PDO->prepare($sql);
+		return $this->PDO->execute([]);
 	}
 
 	/**
@@ -1580,12 +1860,13 @@ class BaseM extends IModelInterface {
 	 *
 	 * @return bool
 	 */
-	public function delPrimaryKey(){
-		$db=$this->getDBName();
-		$table=$this->_table ;
-		$sql="ALTER TABLE `{$db}`.`{$table}` DROP INDEX PRIMARY KEY";
-		$this->PDO->prepare( $sql );
-		return $this->PDO->execute( [] );
+	public function delPrimaryKey()
+	{
+		$db = $this->getDBName();
+		$table = $this->_table;
+		$sql = "ALTER TABLE `{$db}`.`{$table}` DROP INDEX PRIMARY KEY";
+		$this->PDO->prepare($sql);
+		return $this->PDO->execute([]);
 	}
 
 

@@ -7,9 +7,7 @@
  */
 
 namespace PTLibrary\Verify;
-
-use Bin\Error\ErrorHandler;
-use Bin\Exception\VerifyException;
+use \PTLibrary\Error\ErrorHandler;
 
 /**
  * 最小长度校验类

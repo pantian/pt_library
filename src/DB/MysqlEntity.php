@@ -13,7 +13,10 @@ use PTLibrary\Tool\Context;
  */
 class MysqlEntity extends Entity {
 
-	protected $mod;
+	/**
+	 * @var \PTLibrary\DB\BaseM
+	 */
+	private $_mod;
 
 
 	/**
@@ -52,13 +55,15 @@ class MysqlEntity extends Entity {
 	 * @throws \PTLibrary\DB\DBException
 	 */
 	public function getMod(){
-	    if(!$this->mod){
-	        $this->mod=BaseM::instance();
+	    if(!$this->_mod){
+	        $this->_mod=BaseM::instance();
 	    }
-	    $this->mod->init();
-	    $this->_dbName && $this->mod->setDBName($this->_dbName);
-	    $this->_tableName && $this->mod->setTable($this->_tableName);
-		return $this->mod;
+	    //print_r($this->mod);
+	    $this->_mod->init();
+	    $this->_dbName && $this->_mod->setDBName($this->_dbName);
+	    $this->_tableName && $this->_mod->setTable($this->_tableName);
+	    $this->_mod->_entity=$this;
+		return $this->_mod;
 	}
 
 	function getDBTable() {
@@ -86,7 +91,34 @@ class MysqlEntity extends Entity {
 	 * @return bool|int|mixed
 	 */
 	public function save( array $data = [] ) {
-		return $this->getContainer()->save( $data );
+		if($data){
+			$this->setData( $data );
+		}
+		if(!$this->_mod){
+			$this->getMod();
+		}
+		$_d = $this->getDataToArr();
+        print_r($_d);
+		$res=$this->_mod->PDO->saveOrUpdate($_d);
+		$this->_mod->updateAfter($_d);
+		return $res;
+
+	}
+
+	/**
+	 * 重置数据key
+	 * @param $data
+	 */
+	public function resetData(&$data){
+	    foreach ($data as $key=>$value){
+	    	if(substr($key,0,3)==':w_'){
+			    $k=substr($key,3);
+			    $data[$k]=$value;
+		    }else if(substr($key,0,1)==':'){
+			    $k=substr($key,1);
+			    $data[$k]=$value;
+		    }
+	    }
 	}
 
 	/**
@@ -100,7 +132,12 @@ class MysqlEntity extends Entity {
 		if ( ! $id ) {
 			return false;
 		}
-		$m    =$this->getMod();
+		if(!$this->_mod){
+
+			$m    =$this->getMod();
+		}else{
+			$m = $this->_mod;
+		}
 		$info = $m->where( [ $m->getPK() => $id ] )->find();
 		if ( $info ) {
 			$this->setData( $info );
@@ -186,7 +223,7 @@ class MysqlEntity extends Entity {
 	 * @return bool|mixed
 	 */
 	public function getInfoBy( $field, $filed_value ) {
-		$where['field'] = $filed_value;
+		$where[$field] = $filed_value;
 		$info = $this->getMod()->where( $where )->find();
 		if($info){
 			$this->setData( $info );

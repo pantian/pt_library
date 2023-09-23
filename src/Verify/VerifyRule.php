@@ -9,8 +9,8 @@
 namespace PTLibrary\Verify;
 
 
-use Bin\Error\ErrorHandler;
-use Bin\Exception\VerifyException;
+
+use PTLibrary\Error\ErrorHandler;
 
 class VerifyRule {
 	/**
@@ -180,7 +180,7 @@ class VerifyRule {
 
 			if(!class_exists(VerifyFactory::class))return false;
 			if(method_exists(VerifyFactory::class,$methodName)){
-				$V                    = \Verify\VerifyFactory::$methodName();
+				$V                    = VerifyFactory::$methodName();
 				$V->doVerifyRule( $this);
 			}
 		}

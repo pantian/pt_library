@@ -8,8 +8,8 @@
 
 namespace PTLibrary\Verify;
 
-use Bin\Error\ErrorHandler;
-use Bin\Exception\VerifyException;
+use \PTLibrary\Error\ErrorHandler;
+
 
 /**
  * 纯数字校验类

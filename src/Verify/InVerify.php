@@ -8,9 +8,8 @@
 
 namespace PTLibrary\Verify;
 
+use \PTLibrary\Error\ErrorHandler;
 
-use Bin\Error\ErrorHandler;
-use Bin\Exception\VerifyException;
 
 class InVerify implements Verify {
 	/**
@@ -23,7 +22,7 @@ class InVerify implements Verify {
 		$verifyRule->chkDataType();
 		$ruleValue = explode( ',', $verifyRule->ruleValue);
 		if (!in_array($verifyRule->value,$ruleValue)) {
-			$verifyRule->error || $verifyRule->error = $verifyRule->getDes(). '的值必须是'.$verifyRule->ruleValue.'这些';
+			$verifyRule->error || $verifyRule->error = $verifyRule->getDes(). '的值不在['.$verifyRule->ruleValue.']内';
 			throw new VerifyException( ErrorHandler::VERIFY_BETWEEN_LENGTH,$verifyRule->error);
 		}
 		return true;

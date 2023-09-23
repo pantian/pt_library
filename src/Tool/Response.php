@@ -18,7 +18,7 @@ class Response {
 	protected \Swoole\Http\Response $swooleResponse;
 
 	public static function instance(\Swoole\Http\Response $response){
-		$key = '__response';
+		$key = 'swoole_response';
 		$instance=Context::get($key);
 		if($instance){
 			return $instance;

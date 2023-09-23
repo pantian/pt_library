@@ -8,7 +8,6 @@
 
 namespace PTLibrary\Verify;
 
-use Bin\Exception\VerifyException;
 use Bin\Hash\FormHash;
 
 /**

@@ -24,7 +24,7 @@ final class Dir
 	 */
 	static public function dirPath($dir_name)
 	{
-		$dirname = str_ireplace("\\", "/", $dir_name);
+		$dirname = str_replace("\\", "/", $dir_name);
 
 		return substr($dirname, "-1") == "/" ? $dirname : $dirname . "/";
 	}
@@ -84,6 +84,38 @@ final class Dir
 
 		return $list;
 	}
+
+	static function getAllFile($dir, &$returnList=[])
+	{
+		//目录不存在
+
+		if (!is_dir($dir))
+		{
+			throw new \Exception("[$dir] is not a directory.");
+
+		}
+
+		$files = scandir($dir);
+		foreach ($files as $f)
+		{
+			if ($f == '.' or $f == '..')
+			{
+				continue;
+			}
+			$path = $dir . '/' . $f;
+			//递归目录
+			if(is_file($path)){
+				$returnList[]=$path;
+			}
+			else if (is_dir($path))
+			{
+				self::getAllFile($path,$returnList);
+			}
+
+		}
+		return true;
+	}
+
 
 	static public function get_dir_size($f)
 	{

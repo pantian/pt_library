@@ -40,7 +40,7 @@ class MysqlEntityBuilder {
 				}
 				echo '生成: ' . $n . '个实体类 ' . PHP_EOL;
 			} else {
-				echo '数据库 ' . $dbName . ' 下没有数据表' . PHP_EOL;
+				var_dump('数据库 ' . $dbName . ' 下没有数据表' . PHP_EOL);
 			}
 		}
 	}

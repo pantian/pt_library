@@ -8,8 +8,9 @@
 
 namespace PTLibrary\Verify;
 
-use Bin\Error\ErrorHandler;
-use Bin\Exception\VerifyException;
+use \PTLibrary\Error\ErrorHandler;
+
+
 /**
  * 手机号码验证
  * Class MobileVerify

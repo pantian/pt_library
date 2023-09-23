@@ -49,7 +49,12 @@ class Context
      */
     public static function destroy(string $id)
     {
-        unset(static::$nonCoContext[$id]);
+        if (Context::inCoroutine()) {
+            Coroutine::getContext()[$id]=null;
+            return true;
+        }
+
+        return static::$nonCoContext[$id] =null;
     }
 
     /**
@@ -70,6 +75,8 @@ class Context
     {
         return Coroutine::getCid() > 0;
     }
+
+
 
 	/**
 	 * @return array

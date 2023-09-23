@@ -8,11 +8,9 @@
 
 namespace PTLibrary\Verify;
 
-use Bin\Error\ErrorHandler;
-use Bin\Exception\VerifyException;
-use Bin\Hash\FormHash;
-use Bin\Log\Log;
-use Bin\Request\Request;
+use App\Library\Hash\FormHash;
+use \PTLibrary\Error\ErrorHandler;
+
 
 /**
  * 表单Hash校验
@@ -29,7 +27,7 @@ class FormHashVerify implements Verify {
 	 */
 	public function doVerifyRule( VerifyRule $verifyRule ) {
 		$verifyRule->chkDataType();
-		$verifyRule->value=Request::get('_form_hash');
+		$verifyRule->value=\PTLibrary\Tool\Request::instance()->input('_form_hash');
 		//Log::log('---------------------'.$verifyRule);
 		if(!FormHash::verifyHash($verifyRule->value,true)){
 			$verifyRule->error || $verifyRule->error= $verifyRule->getDes(). '请求无效' ;

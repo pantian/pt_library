@@ -7,8 +7,8 @@
  */
 namespace PTLibrary\Verify;
 
-use Bin\Error\ErrorHandler;
-use Bin\Exception\VerifyException;
+use \PTLibrary\Error\ErrorHandler;
+
 
 /**
  * base64图片校验
